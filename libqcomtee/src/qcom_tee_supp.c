@@ -120,6 +120,32 @@ static QCOMTEE_Result get_callback_object(uint64_t object_id,
 	return res;
 }
 
+static QCOMTEE_Result delete_callback_object(uint64_t object_id)
+{
+	QCOMTEE_Result res = QCOMTEE_MSG_ERROR_NOT_FOUND;
+	QCOMTEE_Object *cbo_obj = QCOMTEE_Object_NULL;
+
+	pthread_mutex_lock(&callback_supplicant.supp_lock);
+	for (size_t i = 0; i < CBO_TABLE_SIZE; i++) {
+		cbo_obj = callback_supplicant.cbo_table[i];
+		// Match?
+		if (cbo_obj && cbo_obj->object_id == object_id) {
+			callback_supplicant.cbo_table[i] = QCOMTEE_Object_NULL;
+			cbo_obj->queued = false;
+			QCOMTEE_OBJECT_RELEASE(cbo_obj);
+
+			res = QCOMTEE_MSG_OK;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&callback_supplicant.supp_lock);
+
+	if (res == QCOMTEE_MSG_ERROR_NOT_FOUND)
+		MSGE("Callback object 0x%x not found.\n", object_id);
+
+	return res;
+}
+
 static size_t inc_num_waiters(void)
 {
 	size_t waiters = 0;
@@ -260,6 +286,12 @@ static void *supplicant_thread_func(void *data)
 		request_id = (uint64_t)params->b;
 		params++;
 
+		if (func == QCOMTEE_OBJREF_OP_RELEASE) {
+			res = delete_callback_object(object_id);
+			/* Driver doesn't wait for a response to release */
+			continue;
+		}
+
 		res = get_callback_object(object_id, &callback_object, index);
 		if (res == QCOMTEE_MSG_OK) {
 			res = post_process_suppl_recv(fd, num_params, params,
@@ -282,6 +314,15 @@ static void *supplicant_thread_func(void *data)
 					     object_id, res);
 				}
 			}
+
+			/* If anything goes wrong, free the objects obtained from QTEE.
+			 * This call is made to the driver but does not block, as
+			 * object releases are performed asynchronously.
+			 */
+			if (res != QCOMTEE_MSG_OK)
+				release_remote_objects(num_params,
+						       qcom_tee_params,
+						       QCOMTEE_OBJREF_INPUT);
 
 			// We're done with this object reference
 			pthread_mutex_lock(&callback_supplicant.supp_lock);

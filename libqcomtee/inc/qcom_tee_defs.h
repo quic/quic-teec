@@ -209,6 +209,9 @@ static inline QCOMTEE_Result ioctl_errno_to_res(int err)
 
 #define CALLBACK_OBJ_ID_MIN         0x80000000
 
+#define QCOMTEE_OBJREF_OP_MIN       USHRT_MAX
+#define QCOMTEE_OBJREF_OP_RELEASE   (QCOMTEE_OBJREF_OP_MIN + 1)
+
 typedef struct QCOMTEE_Param QCOMTEE_Param;
 
 #define QCOMTEE_Object_NULL         ((QCOMTEE_Object *)(NULL))

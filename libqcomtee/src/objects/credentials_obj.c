@@ -19,6 +19,11 @@ static void release_creds_obj(QCOMTEE_Object *creds_object)
 	free(creds_object);
 }
 
+/**
+ * NOTE: CBO must release all QCOMTEE_OBJREF_INPUT received from
+ *       QTEE before returning from dispatch() if it wants to
+ *       ensure that they aren't leaked.
+ */
 static QCOMTEE_Result dispatch(QCOMTEE_Object *creds_object, uint32_t op,
 			       uint32_t *num_params,
 			       QCOMTEE_Param *qcom_tee_params,

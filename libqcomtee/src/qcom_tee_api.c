@@ -224,6 +224,8 @@ QCOMTEE_Result QCOMTEE_InvokeObject(QCOMTEE_Object *object, uint32_t op,
 	// Marshal Out
 	res = post_process_object_invoke(num_params, params, qcom_tee_params);
 	if (res != QCOMTEE_MSG_OK) {
+		release_remote_objects(num_params, qcom_tee_params,
+				       QCOMTEE_OBJREF_OUTPUT);
 		MSGE("post_process_object_invoke failed: 0x%x\n", res);
 		goto out;
 	}

@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 
+#include "qcom_tee_api.h"
 #include "qcom_tee_obj.h"
 
 /*
@@ -14,6 +15,12 @@
 static void release_remote_obj(QCOMTEE_Object *remote_obj)
 {
 	QCOMTEE_Object *root = (QCOMTEE_Object *)remote_obj->data;
+
+	if (QCOMTEE_InvokeObject(remote_obj, QCOMTEE_OBJREF_OP_RELEASE, 0,
+				 NULL)) {
+		MSGE("Failed remote object release!\n");
+		return;
+	}
 
 	free(remote_obj);
 	QCOMTEE_OBJECT_RELEASE(root);
@@ -45,4 +52,14 @@ QCOMTEE_Result init_qcom_tee_remote_object(uint64_t object_id,
 	(*remote_object)->release = release_remote_obj;
 
 	return QCOMTEE_MSG_OK;
+}
+
+void release_remote_objects(uint32_t num_params, QCOMTEE_Param *qcom_tee_params,
+			    uint64_t attr)
+{
+	for (uint32_t n = 0; n < num_params; n++) {
+		if (qcom_tee_params[n].attr == attr) {
+			QCOMTEE_OBJECT_RELEASE(qcom_tee_params[n].object);
+		}
+	}
 }
