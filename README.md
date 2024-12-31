@@ -150,6 +150,30 @@ Run Skeleton TA adder test...
 Sum 1 + 1 = 2
 send_add_cmd succeeded! ret: 0
 ```
+3. Run Object Lifecycle Unit test
+```
+qcomtee_client -o 2
+```
+
+This Unit test requests `n` Root Objects via the GetRootObject() API, followed by `n`
+ClientEnv Objects which are immediately released. At last, the test releases the `n`
+Root Objects.
+
+Passing the test verifies the correctness of the Object and Supplicant lifecycle
+management.
+
+```
+Run lifecycle test...
+Got root_object 0
+Got root_object 1
+Got client_env_object 0
+Released client_env_object 0
+Got client_env_object 1
+Released client_env_object 1
+Released root_object 0
+Released root_object 1
+Passed Lifecycle Test!
+```
 
 ## References
 [1]. [Qualcomm Trusted Execution Environment](https://docs.qualcomm.com/bundle/publicresource/topics/80-70015-11/qualcomm-trusted-execution-environment.html)

@@ -489,6 +489,74 @@ err_root_object:
 	return ret;
 }
 
+/**
+ * run_lifecycle_test() - Tests the lifecycle implementation
+ * for the Root Object and Callback Supplicant. It ensures
+ * that the lifecycles of the Root Object and the associated
+ * Callback Supplicant are synchronized. When the last reference
+ * to the Root Object is released, the Callback Supplicant is
+ * correctly shut down.
+ */
+static int run_lifecycle_test(int argc, char *argv[])
+{
+	int ret = 0;
+	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
+
+	size_t i = 0;
+	size_t j = 0;
+	size_t x = 0;
+	size_t table_size = 1;
+
+	if (argc >= 3)
+		table_size = atoi(argv[2]);
+
+	QCOMTEE_Object *root_table[table_size];
+	QCOMTEE_Object *client_env_object = QCOMTEE_Object_NULL;
+
+	for (i = 0; i < table_size; i++) {
+		res = QCOMTEE_GetRootObject(&root_table[i]);
+		if (res != QCOMTEE_MSG_OK) {
+			ret = -1;
+			MSGE("QCOMTEE_GetRootObject failed: 0x%x\n", res);
+			goto err_root_object;
+		}
+
+		printf("Got root_object %d\n", i);
+	}
+
+	for (j = 0; j < table_size; j++) {
+		ret = get_client_env_object(root_table[j], &client_env_object);
+		if (ret) {
+			MSGE("get_client_env_object failed: %d\n", ret);
+			goto err_client_env_object;
+		}
+
+		QCOMTEE_OBJECT_RELEASE(client_env_object);
+		printf("Released client_env_object %d\n", j);
+	}
+
+	for (i = 0; i < table_size; i++) {
+		QCOMTEE_OBJECT_RELEASE(root_table[i]);
+		printf("Released root_object %d\n", i);
+	}
+
+	printf("Passed Lifecycle Test!\n");
+	return 0;
+
+err_client_env_object:
+
+	if (client_env_object)
+		QCOMTEE_OBJECT_RELEASE(client_env_object);
+
+err_root_object:
+	for (x = 0; x < i; x++) {
+		QCOMTEE_OBJECT_RELEASE(root_table[x]);
+	}
+
+	printf("Failed Lifecycle Test!\n");
+	return ret;
+}
+
 void usage(void)
 {
 	printf("\n\n---------------------------------------------------------\n"
@@ -503,13 +571,15 @@ void usage(void)
 	       "\t-l - Load the skeleton test TA and send addition cmd 0.\n"
 	       "\te.g. qcomtee_client -l <path to skeleton TA binary>"
 	       " <num 1> <num 2> <no_of_iterations>\n"
+	       "\t-o - Object lifecycle test for Root Object and Supplicant.\n"
+	       "\te.g. qcom_tee_client -o <no_of_iterations>"
 	       "\t-h, --help - Print this help message and exit\n\n\n");
 }
 
 unsigned int parse_command(int argc, char *const argv[])
 {
 	unsigned int ret = 0;
-	int command = getopt_long(argc, argv, "dlh", testopts, NULL);
+	int command = getopt_long(argc, argv, "dloh", testopts, NULL);
 
 	if (command == -1)
 		usage();
@@ -521,6 +591,9 @@ unsigned int parse_command(int argc, char *const argv[])
 			break;
 		case 'l':
 			ret = 1 << SKELETON_TA_TEST;
+			break;
+		case 'o':
+			ret = 1 << LIFECYCLE_TEST;
 			break;
 		case 'h':
 			usage();
@@ -545,6 +618,10 @@ int main(int argc, char *argv[])
 		   (1U << SKELETON_TA_TEST)) {
 		printf("Run Skeleton TA adder test...\n");
 		return run_skeleton_ta_test(argc, argv);
+	} else if ((test_mask & (1 << LIFECYCLE_TEST)) ==
+		   (1U << LIFECYCLE_TEST)) {
+		printf("Run lifecycle test...\n");
+		return run_lifecycle_test(argc, argv);
 	} else {
 		return -1;
 	}

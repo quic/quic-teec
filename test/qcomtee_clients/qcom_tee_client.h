@@ -17,11 +17,13 @@ typedef struct {
 struct option testopts[] = {
 	{ "diagnostics", no_argument, NULL, 'd' },
 	{ "skeletonta", no_argument, NULL, 'l' },
+	{ "lifecycle", no_argument, NULL, 'o' },
 };
 
 enum test_types {
 	PRINT_TZ_DIAGNOSTICS,
 	SKELETON_TA_TEST,
+	LIFECYCLE_TEST,
 };
 
 void usage(void);
