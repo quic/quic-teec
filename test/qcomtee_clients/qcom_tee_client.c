@@ -8,7 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "credentials.h"
+#include "credentials_obj.h"
 
 #include "qcom_tee_api.h"
 #include "qcom_tee_client.h"
@@ -132,6 +132,7 @@ static int __readFile(const char *filename, size_t size, uint8_t *buffer)
 	if (file) {
 		fclose(file);
 	}
+
 	return ret;
 }
 
@@ -299,38 +300,34 @@ static int get_diagnostics_service_object(QCOMTEE_Object *client_env_object,
 	return 0;
 }
 
-static int get_client_env_object(QCOMTEE_Object **client_env_object)
+static int get_client_env_object(QCOMTEE_Object **root_object,
+				 QCOMTEE_Object **client_env_object)
 {
 	int ret = 0;
 	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
-	QCOMTEE_Object *root_object = QCOMTEE_Object_NULL;
+	QCOMTEE_Object *creds_object = QCOMTEE_Object_NULL;
+
 	uint32_t num_params = 2;
 	QCOMTEE_Param params[num_params];
-
-	size_t len = 0;
-	void *creds = NULL;
-
-	res = QCOMTEE_GetRootObject(&root_object);
-	if (res != QCOMTEE_MSG_OK) {
-		ret = -1;
-		MSGE("QCOMTEE_GetRootObject failed: 0x%x\n", res);
-		goto err_root_object;
-	}
 
 	/* The client needs to send it's credentials to QTEE in order to obtain
 	 * a client env object.
 	 */
-	creds = get_credentials(&len);
+	res = GetCredentialsObject(&creds_object);
+	if (res != QCOMTEE_MSG_OK) {
+		ret = -1;
+		MSGE("GetCredentialsObject failed: 0x%x\n", res);
+		goto err_creds_object;
+	}
 
 	memset(params, 0, sizeof(params));
-	params[0].attr = QCOMTEE_UBUF_INPUT;
-	params[0].ubuf.buffer = (void *)creds;
-	params[0].ubuf.size = len;
+	params[0].attr = QCOMTEE_OBJREF_INPUT;
+	params[0].object = creds_object;
 
 	params[1].attr = QCOMTEE_OBJREF_OUTPUT;
 
 	res = QCOMTEE_InvokeObject(root_object,
-				   1 /* IClientEnv_OP_registerLegacy */,
+				   2 /* IClientEnv_OP_registerAsClient */,
 				   num_params, params);
 	if (res != QCOMTEE_MSG_OK) {
 		ret = -1;
@@ -343,18 +340,16 @@ static int get_client_env_object(QCOMTEE_Object **client_env_object)
 	MSGD("Got client_env_object %ld\n", (*client_env_object)->object_id);
 
 err_invoke_object:
-	if (creds)
-		free(creds);
+	QCOMTEE_OBJECT_RELEASE(creds_object);
 
-	QCOMTEE_OBJECT_RELEASE(root_object);
-
-err_root_object:
+err_creds_object:
 	return ret;
 }
 
 static int run_skeleton_ta_test(int argc, char *argv[])
 {
 	int ret = 0;
+	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
 	char *appFullPath = NULL;
 	int num1 = 0;
 	int num2 = 0;
@@ -371,15 +366,23 @@ static int run_skeleton_ta_test(int argc, char *argv[])
 		return -1;
 	}
 
+	QCOMTEE_Object *root_object = QCOMTEE_Object_NULL;
 	QCOMTEE_Object *client_env_object = QCOMTEE_Object_NULL;
 	QCOMTEE_Object *app_loader_object = QCOMTEE_Object_NULL;
 	QCOMTEE_Object *app_controller_object = QCOMTEE_Object_NULL;
 	QCOMTEE_Object *app_object = QCOMTEE_Object_NULL;
 
-	ret = get_client_env_object(&client_env_object);
+	res = QCOMTEE_GetRootObject(&root_object);
+	if (res != QCOMTEE_MSG_OK) {
+		ret = -1;
+		MSGE("QCOMTEE_GetRootObject failed: 0x%x\n", res);
+		goto err_root_object;
+	}
+
+	ret = get_client_env_object(root_object, &client_env_object);
 	if (ret) {
 		MSGE("get_client_env_object failed: %d\n", ret);
-		goto err_client_env;
+		goto err_client_env_object;
 	}
 
 	ret = get_app_loader_object(client_env_object, &app_loader_object);
@@ -415,24 +418,36 @@ err_load_app:
 err_app_loader:
 	QCOMTEE_OBJECT_RELEASE(client_env_object);
 
-err_client_env:
-	return 0;
+err_client_env_object:
+	QCOMTEE_OBJECT_RELEASE(root_object);
+
+err_root_object:
+	return ret;
 }
 
 static int run_tz_diagnostics_test(int argc, char *argv[])
 {
 	int ret = 0;
+	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
 	int iterations = 1;
 	if (argc >= 3)
 		iterations = atoi(argv[2]);
 
+	QCOMTEE_Object *root_object = QCOMTEE_Object_NULL;
 	QCOMTEE_Object *client_env_object = QCOMTEE_Object_NULL;
 	QCOMTEE_Object *service_object = QCOMTEE_Object_NULL;
 
 	IDiagnostics_HeapInfo heapInfo;
 	memset((void *)&heapInfo, 0, sizeof(IDiagnostics_HeapInfo));
 
-	ret = get_client_env_object(&client_env_object);
+	res = QCOMTEE_GetRootObject(&root_object);
+	if (res != QCOMTEE_MSG_OK) {
+		ret = -1;
+		MSGE("QCOMTEE_GetRootObject failed: 0x%x\n", res);
+		goto err_root_object;
+	}
+
+	ret = get_client_env_object(root_object, &client_env_object);
 	if (ret) {
 		MSGE("get_client_env_object failed: %d\n", ret);
 		goto err_client_env_object;
@@ -468,6 +483,9 @@ err_service_object:
 	QCOMTEE_OBJECT_RELEASE(client_env_object);
 
 err_client_env_object:
+	QCOMTEE_OBJECT_RELEASE(root_object);
+
+err_root_object:
 	return ret;
 }
 

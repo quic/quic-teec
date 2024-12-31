@@ -4,6 +4,7 @@
 #include <fcntl.h>
 
 #include "qcom_tee_obj.h"
+#include "qcom_tee_supp.h"
 
 static void release_root_obj(QCOMTEE_Object *root);
 
@@ -41,6 +42,12 @@ static QCOMTEE_Object root_object = {
 
 static void release_root_obj(QCOMTEE_Object *root)
 {
+	/* Since the Callback Supplicant is a part of the Root Object,
+	 * releasing the Root Object implies shutting down the
+	 * Supplicant.
+	 */
+	stop_supplicant();
+
 	close(root->fd);
 	root->fd = -1;
 }
@@ -94,6 +101,12 @@ QCOMTEE_Result init_qcom_tee_root_object(char *devname, QCOMTEE_Object **object)
 
 	root_object.fd = fd;
 	atomic_init(&root_object.refs, 1);
+
+	/* The Callback Supplicant is a part of the Root Object.
+	 * Hence, it is initialized along with the Root Object
+	 * and shares it's context via the fd.
+	 */
+	start_supplicant(fd);
 
 	*object = &root_object;
 

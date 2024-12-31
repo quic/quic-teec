@@ -10,6 +10,7 @@
 
 #include "qcom_tee_api.h"
 #include "qcom_tee_obj.h"
+#include "qcom_tee_supp.h"
 
 /*
 ===========================================================================
@@ -32,6 +33,8 @@ static QCOMTEE_Result pre_process_object_invoke(uint32_t num_params,
 						QCOMTEE_Param *qcom_tee_params,
 						struct tee_ioctl_param *params)
 {
+	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
+
 	for (int n = 0; n < num_params; n++) {
 		switch (qcom_tee_params[n].attr) {
 		case QCOMTEE_UBUF_INPUT:
@@ -43,6 +46,16 @@ static QCOMTEE_Result pre_process_object_invoke(uint32_t num_params,
 			params[n].attr = TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT;
 			params[n].a = (uint64_t)qcom_tee_params[n].ubuf.buffer;
 			params[n].b = (uint64_t)qcom_tee_params[n].ubuf.size;
+			break;
+		case QCOMTEE_OBJREF_INPUT:
+			res = add_callback_object(qcom_tee_params[n].object);
+			if (res != QCOMTEE_MSG_OK) {
+				return res;
+			}
+
+			params[n].attr = TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT;
+			params[n].a = (qcom_tee_params[n].object)->object_id;
+			params[n].b = QCOMTEE_OBJREF_USER;
 			break;
 		case QCOMTEE_OBJREF_OUTPUT:
 			params[n].attr =
@@ -80,6 +93,7 @@ static QCOMTEE_Result post_process_object_invoke(uint32_t num_params,
 			qcom_tee_params[n].object = remote_object;
 			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_INPUT:
+		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT:
 			break;
 		default:
 			return QCOMTEE_MSG_ERROR;
@@ -219,4 +233,24 @@ out:
 		free(arg);
 
 	return res;
+}
+
+QCOMTEE_Result QCOMTEE_RegisterCallbackObject(QCOMTEE_Object *cb_object)
+{
+	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
+
+	if (cb_object->object_type != QCOM_TEE_OBJECT_TYPE_CB) {
+		res = QCOMTEE_MSG_ERROR_INVALID;
+		MSGE("Invalid object type: 0x%x\n", res);
+		return res;
+	}
+
+	if (!cb_object->release || !cb_object->dispatch) {
+		res = QCOMTEE_MSG_ERROR_INVALID;
+		MSGE("Object operations not defined: 0x%x\n", res);
+		return res;
+	}
+
+	cb_object->object_id = alloc_callback_object_id();
+	return QCOMTEE_MSG_OK;
 }

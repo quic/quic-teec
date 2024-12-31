@@ -9,6 +9,9 @@ titled [Trusted Execution Environment (TEE) driver for Qualcomm TEE (QTEE)](http
 QTEE enables Trusted Applications (TAs) and Services to run securely. It uses an object-based interface, where each service is an object with sets of operations. Clients can invoke these
 operations on objects, which can generate results, including other objects. For example, an object can load a TA and return another object that represents the loaded TA, allowing access to its services.
 
+Kernel and userspace services are also available to QTEE through a similar approach. QTEE makes callback requests that are converted into object invocations. These objects can represent services hosted
+within the kernel or userspace process.
+
 ### Features
 
 The QCOM-TEE Library exposes the following APIs to clients to enable Object-based IPC with QTEE:
@@ -17,17 +20,25 @@ The QCOM-TEE Library exposes the following APIs to clients to enable Object-base
 
 `InvokeObject()` - Invoke a QTEE Object which represents a service hosted in QTEE.
 
+`RegisteCallbackObject()` - Register a `CallbackObject` representing a service hosted in the client which can be invoked by QTEE.
+
 After obtaining a `RootObject`, the client can invoke an operation on it via the `InvokeObject()` API. The library marshals the object and operation parameters into a format suitable for
 `TEE_IOC_OBJECT_INVOKE` IOCTL, which are then transported to QTEE via the QCOM-TEE back-end driver registered with the Linux TEE subsystem. In response, QTEE can return a result, such as
 another object (called a `RemoteObject`) or Buffer. The `RemoteObject` can be invoked again to request another service from QTEE.
 
+As part of the parameters passed to `InvokeObject()`, the client can send a `CallbackObject` to QTEE which represents a service hosted in the client. QTEE can in-turn invoke this
+`CallbackObject` to request the service. Such 'callback' requests from QTEE are serviced by the **Callback Supplicant** which is a part of the originally initialized `RootObject`.
+The Callback Supplicant has several associated worker threads that wait for a callback request from QTEE via the `TEE_IOC_SUPPL_RECV` IOCTL interface provided by the TEE subsystem.
+Upon receiving a callback request, a worker thread wakes up and invokes the `dispatch()` operation within the Callback Object which implements the object's service.
+The result of the `dispatch()` operation is sent back to QTEE via the `TEE_IOC_SUPPL_SEND` IOCTL.
+
 ```
          User space                             Kernel                       Secure world
          ~~~~~~~~~~                             ~~~~~~                       ~~~~~~~~~~~~
-   +--------++---------+                                                     +--------------+
-   | Client || QCOMTEE |                                                     | Trusted      |
-   +--------+| Library |                                                     | Application  |
-      /\     +---------+                                                     +--------------+
+   +--------++---------+-----------+                                         +--------------+
+   | Client || QCOMTEE | Callback  |                                         | Trusted      |
+   +--------+| Library | Supplicant|                                         | Application  |
+      /\     +---------+-----------+                                         +--------------+
       ||            /\                                                            /\
       ||            ||                                                            ||
       ||            ||                                                            \/

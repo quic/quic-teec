@@ -35,4 +35,16 @@ QCOMTEE_Result QCOMTEE_InvokeObject(QCOMTEE_Object *object, uint32_t op,
 				      uint32_t num_params,
 				      QCOMTEE_Param *qcom_tee_params);
 
+/**
+ * QCOMTEE_RegisterCallbackObject() - Register a callback object with the
+ * Callback Supplicant. The callback object represents a service hosted
+ * in the client which can be invoked by QTEE.
+ *
+ * @param cb_object          The callback object to be registered.
+ *
+ * @return QCOMTEE_SUCCESS   The object was successfully registered.
+ * @return QCOMTEE_Result    Something failed.
+ */
+QCOMTEE_Result QCOMTEE_RegisterCallbackObject(QCOMTEE_Object *cb_object);
+
 #endif // _QCOM_TEE_API_H

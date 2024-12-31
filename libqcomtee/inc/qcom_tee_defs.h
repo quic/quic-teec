@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
 
@@ -86,6 +87,12 @@
  * interface-by-interface basis.
  */
 #define QCOMTEE_MSG_ERROR_USERBASE     10
+
+/**
+ * QCOMTEE_MSG_ERROR_NOT_FOUND indicates that the requested object or item
+ * was not found.
+ */
+#define QCOMTEE_MSG_ERROR_NOT_FOUND    11
 
 /**
  * QCOMTEE_MSG_ERROR_DEFUNCT indicates that the object reference will no
@@ -200,6 +207,8 @@ static inline QCOMTEE_Result ioctl_errno_to_res(int err)
 #define QCOMTEE_OBJREF_NULL         (uint64_t)(-1)
 #define QCOMTEE_OBJREF_USER         (1 << 0)
 
+#define CALLBACK_OBJ_ID_MIN         0x80000000
+
 typedef struct QCOMTEE_Param QCOMTEE_Param;
 
 #define QCOMTEE_Object_NULL         ((QCOMTEE_Object *)(NULL))
@@ -209,12 +218,14 @@ typedef struct QCOMTEE_Param QCOMTEE_Param;
  * between the client and QTEE.
  *
  * QCOM_TEE_OBJECT_TYPE_TEE       - Remote Object hosted in the QTEE.
+ * QCOM_TEE_OBJECT_TYPE_CB        - Callback Object hosted in client.
  * QCOM_TEE_OBJECT_TYPE_ROOT      - Root Object which can be used to initiate
  *                                  object exchange with QTEE.
  */
 typedef enum {
 	QCOM_TEE_OBJECT_TYPE_TEE,
 	QCOM_TEE_OBJECT_TYPE_ROOT,
+	QCOM_TEE_OBJECT_TYPE_CB,
 } QCOMTEE_ObjectType;
 
 typedef struct QCOMTEE_Object QCOMTEE_Object;
@@ -224,6 +235,8 @@ struct QCOMTEE_Object {
 	uint64_t object_id;
 	QCOMTEE_ObjectType object_type;
 
+	bool queued;
+
 	union {
 		void *data;
 
@@ -231,6 +244,13 @@ struct QCOMTEE_Object {
 	};
 
 	void (*release)(QCOMTEE_Object *object);
+
+	QCOMTEE_Result (*dispatch)(QCOMTEE_Object *object,
+				    uint32_t op,
+				    uint32_t *num_params,
+				    QCOMTEE_Param *qcom_tee_params,
+				    uint8_t *cbo_buffer,
+				    size_t cbo_len);
 };
 
 /*
@@ -264,6 +284,8 @@ QCOMTEE_Object *QCOMTEE_RetainObject(QCOMTEE_Object *object);
 #define QCOMTEE_OBJECT_RETAIN(o) \
         (o) ? QCOMTEE_RetainObject(o) : QCOMTEE_Object_NULL
 
+#define QCOMTEE_OBJECT_DISPATCH(o, op, n, params, buf, len) \
+        (o)->dispatch(o, op, n, params, buf, len)
 /*
 ===========================================================================
                          MEMORY DEFINITIONS

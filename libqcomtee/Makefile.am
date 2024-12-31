@@ -8,11 +8,15 @@ ACLOCAL_AMFLAGS = -I m4
 library_includedir = $(pkgincludedir)
 library_include_HEADERS = ./inc/qcom_tee_api.h \
                           ./inc/qcom_tee_defs.h \
-                          ./inc/credentials.h
+                          ./inc/credentials.h \
+                          ./inc/credentials_obj.h
 
 c_sources = ./src/qcom_tee_api.c \
+            ./src/qcom_tee_supp.c \
             ./src/objects/remote_obj.c \
             ./src/objects/root_obj.c \
+            ./src/objects/callback_obj.c \
+            ./src/objects/credentials_obj.c \
             ./src/utils/credentials.c
 
 lib_LTLIBRARIES := libqcomtee.la

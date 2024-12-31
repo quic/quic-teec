@@ -28,4 +28,11 @@ QCOMTEE_Object *get_root_ptr(void);
 QCOMTEE_Result init_qcom_tee_remote_object(uint64_t object_id,
 					     QCOMTEE_Object **remote_object);
 
+/*
+===========================================================================
+                         CALLBACK OBJECT
+===========================================================================
+*/
+uint64_t alloc_callback_object_id(void);
+
 #endif // _QCOM_TEE_OBJ_H
