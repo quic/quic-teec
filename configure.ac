@@ -42,6 +42,7 @@ else
 fi
 
 AC_CONFIG_FILES([Makefile \
-                 libqcomtee/Makefile])
+                 libqcomtee/Makefile \
+                 test/qcomtee_clients/Makefile])
 
 AC_OUTPUT

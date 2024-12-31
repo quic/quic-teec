@@ -15,8 +15,7 @@ Before raising a pull-request, please read and follow this checklist:
   If you want to make multiple independent changes, please consider submitting them as separate pull requests.
   In the description, provide context about what the changes do and why they should be made.
 - Write a [good commit message](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
-- For every new feature, add Unit Tests.
-
+- For every new feature, add Unit Tests to the `qcomtee_client` or write your own.
 
 ## Submitting a pull request
 
@@ -40,6 +39,7 @@ Before raising a pull-request, please read and follow this checklist:
     ```
 
 1. Make your changes and ensuring you follow the [Coding Style Guide](CODING-STYLE.md).
+1. Add Unit tests to `qcomtee_client`, or write your own. Make sure the old and new tests pass.
 1. Commit your changes using the [DCO](http://developercertificate.org/). You can attest to the DCO by commiting with the **-s** or **--signoff** options or manually adding the "Signed-off-by":
     
     ```bash

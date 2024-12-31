@@ -94,6 +94,52 @@ export STRIP=aarch64-linux-gnu-strip
 1. The QCBOR package is built with `-DBUILD_SHARED_LIBS=ON` flag
 2. Your kernel headers carry the changes from [Trusted Execution Environment (TEE) driver for Qualcomm TEE (QTEE)](https://lore.kernel.org/all/20241202-qcom-tee-using-tee-ss-without-mem-obj-v1-0-f502ef01e016@quicinc.com/) patch series.
 
+## Unit Tests
+
+You can run the `qcomtee_client` provided Unit tests with the following commands:
+
+1. Run the diagnostics Unit Test:
+```
+qcomtee_client -d 1
+```
+
+This Unit test first obtains a `diagnostics_service_object` from QTEE,
+and then invokes it to query diagnostics information on QTEE heap usage.
+It then prints the received diagnostics on the console.
+
+Passing the test implies that we are able to communicate with embedded
+services in QTEE.
+
+```
+Run TZ Diagnostics test...
+Retrieve TZ heap info Iteration 0
+831360 = Total bytes as heap
+106083 = Total bytes allocated from heap
+705808 = Total bytes free on heap
+15184 = Total bytes overhead
+4285 = Total bytes wasted
+454160 = Largest free block size
+```
+
+2. Load the 'Skeleton' Trusted application and send addition command `0`:
+```
+qcomtee_client -l /data/smcinvoke_skeleton_ta64.mbn <num 1> <num 2> 1
+```
+
+This Unit test first loads the 'Skeleton' TA binary in a buffer, and sends it to QTEE
+by invoking the `app_loader_object` (which represents a TA loading service within QTEE).
+QTEE in turn returns an `app_object` which can now be used to send commands to the TA.
+The test sends command `0` to the TA to request addition of `num 1` and `num 2` and checks
+for response `num 1 + num 2` from the TA.
+
+Passing the test implies that we are able to load a TA in QTEE and communicate with it.
+
+```
+Run Skeleton TA adder test...
+Sum 1 + 1 = 2
+send_add_cmd succeeded! ret: 0
+```
+
 ## References
 [1]. [Qualcomm Trusted Execution Environment](https://docs.qualcomm.com/bundle/publicresource/topics/80-70015-11/qualcomm-trusted-execution-environment.html)
 

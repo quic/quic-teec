@@ -1,3 +1,3 @@
 # Makefile.am - Automake script for quic-teec
 
-SUBDIRS = libqcomtee
+SUBDIRS = libqcomtee test/qcomtee_clients
