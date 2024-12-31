@@ -1,0 +1,15 @@
+#!/bin/bash
+
+libtoolize --force --copy --automake
+aclocal $ACLOCAL_FLAGS
+# save original files to avoid modifications by gettextize
+autoheader
+automake --foreign --copy --add-missing
+# for older automake
+touch depcomp
+autoconf
+echo "./configure $@"
+./configure $@ || exit 1
+if [ -z "$GITCOMPILE_NO_MAKE" ]; then
+  make
+fi
