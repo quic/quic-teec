@@ -6,27 +6,13 @@ This project primarily follows the [Linux kernel coding style](https://www.kerne
 the [clang-format](https://clang.llvm.org/docs/ClangFormat.html) tool with the
 `.clang-format` file provided at the top of the repository.
 
-However, we deviate slightly with the following exceptions:
-* `CamelCase` is allowed for `types` and `public API` names.
-* All variables must be initialized to a valid default value for it's `type`.
-In particular,
-  * Standard integer types must be initialized to a sensible value such as `0`
-or `-1`.
-  * Pointers must be initialized to `NULL`.
-  * `structs` must be initialized via `{ 0 }` if composed to all scalars,
-or via `memset()`.
-* Header files are **not formatted** via the `.clang-format` file to preserve
-white-spaces in macros definitions.
-
 ## Code Formatting Guidelines
 
 
 ### Headers and Includes
 
-- Typically every header file has the same base filename as an associated source file.
-- The body of each header file must be surrounded by an include guard (aka "header guard"). These guards shall be given the same name as the path in which they reside. Their names shall be all caps, with words separated by the underscore character "_". For example, *_QCOM_TEE_SUPP_H*
-- Header files should never define functions or variables.
-- Header files should only `#include` what is necessary to allow a file that includes it to compile. Associated source files will always `#include` the header of the same name.
+- The body of each header file must be surrounded by an include guard (aka "header guard"). Their names shall be all caps, with words separated by the underscore character "_". For example, *_QCOMTEE_OBJECT_H*
+- Header files should only `#include` what is necessary to allow a file that includes it to compile.
 - Ordering header files as follows:
     - Standard headers
     - C system headers
@@ -52,6 +38,9 @@ white-spaces in macros definitions.
 
 ## Commenting Styles
 
+- **General Documentation:**
+Use [Doxygen](https://www.doxygen.nl/index.html) format.
+
 - **Inline Comments**: Use `//` for short, explanatory comments at the end of a line.
 
   ```c
@@ -68,21 +57,6 @@ white-spaces in macros definitions.
     return z * z * z;
   }
   ...
-  ```
-
-- **API documentation:**
-  ```c
-  /**
-   * This function calculates the square of a number
-   * used in the context of distance calculations.
-   *
-   * @param    num  Number to be squared.
-   *
-   * @return   int  The square of the number.
-   */
-  int square(int num) {
-    return num * num;
-  }
   ```
 
 - **Block Comments**: Use `/* */` for detailed explanations of code.
