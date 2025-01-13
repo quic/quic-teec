@@ -1,124 +1,155 @@
 // Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include <limits.h>
-#include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <qcbor/qcbor.h>
+#include <qcomtee_object_types.h>
 
-#include "qcom_tee_api.h"
-#include "credentials.h"
-#include "credentials_obj.h"
-#include "utils/utils.h"
+#define IIO_OP_GET_LENGTH 0
+#define IIO_OP_READ_AT_OFFSET 1
 
-static void release_creds_obj(QCOMTEE_Object *creds_object)
+static int64_t get_time_in_ms(void)
 {
-	credentials *creds = (credentials *)creds_object->data;
+	struct timeval tv;
 
-	free(creds->cred_buffer);
-	free(creds);
-	free(creds_object);
+	gettimeofday(&tv, NULL);
+
+	return (int64_t)(tv.tv_sec * 1000) + (int64_t)(tv.tv_usec / 1000);
 }
 
-/**
- * NOTE: CBO must release all QCOMTEE_OBJREF_INPUT received from
- *       QTEE before returning from dispatch() if it wants to
- *       ensure that they aren't leaked.
- */
-static QCOMTEE_Result dispatch(QCOMTEE_Object *creds_object, uint32_t op,
-			       uint32_t *num_params,
-			       QCOMTEE_Param *qcom_tee_params,
-			       uint8_t *cbo_buffer, size_t cbo_buffer_len)
+enum {
+	attr_uid = 1,
+	attr_pkg_flags,
+	attr_pkg_name,
+	attr_pkg_cert,
+	attr_permissions,
+	attr_system_time,
+};
+
+#define CREDENTIALS_BUF_SIZE_INC 4096
+static int realloc_useful_buf(UsefulBuf *buf)
 {
-	uint64_t cred_buf_len = 0;
-	uint64_t offset_val = 0;
-	size_t data_len = 0;
-	size_t needed_len = 0;
-	size_t data_lenout = 0;
+	void *ptr;
 
-	if (!creds_object)
-		return QCOMTEE_MSG_ERROR_INVALID;
+	ptr = realloc(buf->ptr, buf->len + CREDENTIALS_BUF_SIZE_INC);
+	if (!ptr)
+		return -1;
 
-	credentials *creds = (credentials *)creds_object->data;
+	buf->ptr = ptr;
+	buf->len += CREDENTIALS_BUF_SIZE_INC;
+	memset(buf->ptr, 0, buf->len);
+
+	return 0;
+}
+
+/* Get credentials. */
+static int credentials_init(struct qcomtee_ubuf *ubuf)
+{
+	QCBOREncodeContext e_ctx;
+	UsefulBufC enc;
+	UsefulBuf creds_useful_buf = { NULL, 0 };
+
+	do {
+		if (realloc_useful_buf(&creds_useful_buf)) {
+			free(creds_useful_buf.ptr);
+			return -1;
+		}
+
+		/* Use UID and system time to create a CBOR buffer. */
+		QCBOREncode_Init(&e_ctx, creds_useful_buf);
+		QCBOREncode_OpenMap(&e_ctx);
+		QCBOREncode_AddInt64ToMapN(&e_ctx, attr_uid, getuid());
+		QCBOREncode_AddInt64ToMapN(&e_ctx, attr_system_time,
+					   get_time_in_ms());
+		QCBOREncode_CloseMap(&e_ctx);
+	} while (QCBOREncode_Finish(&e_ctx, &enc) ==
+		 QCBOR_ERR_BUFFER_TOO_SMALL);
+
+	ubuf->addr = (void *)enc.ptr;
+	ubuf->size = enc.len;
+
+	return 0;
+}
+
+/* CREDENTIAL callback object. */
+struct qcomtee_credentials {
+	struct qcomtee_object object;
+	struct qcomtee_ubuf ubuf;
+};
+
+#define CREDENTIALS(o) container_of((o), struct qcomtee_credentials, object)
+
+static void qcomtee_object_credentials_release(struct qcomtee_object *object)
+{
+	struct qcomtee_credentials *qcomtee_cred = CREDENTIALS(object);
+
+	free(qcomtee_cred->ubuf.addr);
+	free(qcomtee_cred);
+}
+
+static qcomtee_result_t
+qcomtee_object_credentials_dispatch(struct qcomtee_object *object,
+				    qcomtee_op_t op,
+				    struct qcomtee_param *params, int *num)
+{
+	struct qcomtee_credentials *qcomtee_cred = CREDENTIALS(object);
 
 	switch (op) {
-	case IIO_OP_getLength:
+	case IIO_OP_GET_LENGTH:
+		params[0].attr = QCOMTEE_UBUF_OUTPUT;
+		params[0].ubuf.addr = &qcomtee_cred->ubuf.size;
+		params[0].ubuf.size = sizeof(qcomtee_cred->ubuf.size);
 
-		cred_buf_len = creds->cred_buf_len;
-		memset(cbo_buffer, 0, cbo_buffer_len);
-		memscpy(cbo_buffer, sizeof(uint64_t), &cred_buf_len,
-			sizeof(uint64_t));
-
-		qcom_tee_params[0].attr = QCOMTEE_UBUF_OUTPUT;
-		qcom_tee_params[0].ubuf.buffer = (void *)cbo_buffer;
-		qcom_tee_params[0].ubuf.size = sizeof(uint64_t);
-
-		*num_params = 1;
 		break;
-	case IIO_OP_readAtOffset:
+	case IIO_OP_READ_AT_OFFSET: {
+		uint64_t offset = *((uint64_t *)(params[0].ubuf.addr));
 
-		offset_val = *((uint64_t *)(qcom_tee_params[0].ubuf.buffer));
+		if (offset >= qcomtee_cred->ubuf.size)
+			return QCOMTEE_ERROR_INVALID;
 
-		if ((size_t)offset_val >= creds->cred_buf_len)
-			return QCOMTEE_MSG_ERROR_INVALID;
+		params[0].attr = QCOMTEE_UBUF_OUTPUT;
+		params[0].ubuf.addr = qcomtee_cred->ubuf.addr + offset;
+		params[0].ubuf.size = qcomtee_cred->ubuf.size - offset;
 
-		data_len = 10;
-		needed_len = creds->cred_buf_len - (size_t)offset_val;
-
-		memset(cbo_buffer, 0, cbo_buffer_len);
-		data_lenout =
-			memscpy(cbo_buffer, data_len,
-				(const char *)creds->cred_buffer + offset_val,
-				needed_len);
-
-		qcom_tee_params[0].attr = QCOMTEE_UBUF_OUTPUT;
-		qcom_tee_params[0].ubuf.buffer = (void *)cbo_buffer;
-		qcom_tee_params[0].ubuf.size = data_lenout;
-
-		*num_params = 1;
 		break;
+	}
 	default:
-		return QCOMTEE_MSG_ERROR_INVALID;
+		/* NEVER GET HERE! */
+		return QCOMTEE_ERROR_INVALID;
 	}
 
-	return QCOMTEE_MSG_OK;
+	*num = 1; /* Return one parameter. */
+
+	return QCOMTEE_OK;
 }
 
-QCOMTEE_Result GetCredentialsObject(QCOMTEE_Object **creds_object)
+static struct qcomtee_object_ops ops = {
+	.release = qcomtee_object_credentials_release,
+	.dispatch = qcomtee_object_credentials_dispatch,
+};
+
+qcomtee_result_t
+qcomtee_object_credentials_init(struct qcomtee_object *root_object,
+				struct qcomtee_object **object)
 {
-	QCOMTEE_Result res = QCOMTEE_MSG_ERROR;
-	credentials *creds = NULL;
+	struct qcomtee_credentials *qcomtee_cred;
 
-	*creds_object = (QCOMTEE_Object *)malloc(sizeof(QCOMTEE_Object));
-	if (*creds_object == NULL)
-		return QCOMTEE_MSG_ERROR_MEM;
+	qcomtee_cred = calloc(1, sizeof(*qcomtee_cred));
+	if (!qcomtee_cred)
+		return QCOMTEE_ERROR_MEM;
 
-	(*creds_object)->object_type = QCOM_TEE_OBJECT_TYPE_CB;
-	(*creds_object)->queued = false;
-	(*creds_object)->release = release_creds_obj;
-	(*creds_object)->dispatch = dispatch;
+	qcomtee_object_cb_init(&qcomtee_cred->object, &ops, root_object);
+	/* INIT the credentials buffer. */
+	if (credentials_init(&qcomtee_cred->ubuf)) {
+		free(qcomtee_cred);
 
-	// Allocate the object_id for this CBO, mandatory!
-	res = QCOMTEE_RegisterCallbackObject(*creds_object);
-	if (res != QCOMTEE_MSG_OK) {
-		free(*creds_object);
-		return res;
+		return QCOMTEE_ERROR_MEM;
 	}
 
-	(*creds_object)->data = (void *)malloc(sizeof(credentials));
-	if ((*creds_object)->data == NULL) {
-		free(*creds_object);
-		return QCOMTEE_MSG_ERROR_MEM;
-	}
+	/* Get the credentials object. */
+	*object = &qcomtee_cred->object;
 
-	creds = (credentials *)((*creds_object)->data);
-	creds->cred_buffer = (uint8_t *)get_credentials(&creds->cred_buf_len);
-	if (!creds->cred_buffer) {
-		free(creds);
-		free(*creds_object);
-		return QCOMTEE_MSG_ERROR_MEM;
-	}
-
-	atomic_init(&((*creds_object)->refs), 1);
-
-	return QCOMTEE_MSG_OK;
+	return QCOMTEE_OK;
 }
