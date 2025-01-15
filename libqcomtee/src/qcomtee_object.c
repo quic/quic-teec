@@ -391,7 +391,7 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 	struct qcomtee_object *object = param->object;
 
 	/* It expects caller to set tee_param attribute. */
-	if (tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT ||
+	if (tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT &&
 	    tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT)
 		return -1;
 
@@ -711,7 +711,7 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 	union tee_ioctl_arg *arg;
 
 	/* Use can only invoke QTEE object ot root object. */
-	if (object->object_type != QCOMTEE_OBJECT_TYPE_ROOT ||
+	if (object->object_type != QCOMTEE_OBJECT_TYPE_ROOT &&
 	    object->object_type != QCOMTEE_OBJECT_TYPE_TEE)
 		return -1;
 	/* QTEE does not support more than 64 parameter. */
