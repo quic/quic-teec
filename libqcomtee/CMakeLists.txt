@@ -28,7 +28,7 @@ set(SRC
         src/objects/credentials_obj.c
 )
 
-add_library(qcomtee SHARED ${SRC})
+add_library(qcomtee ${SRC})
 
 # ''Library pkg-config file and version''.
 
