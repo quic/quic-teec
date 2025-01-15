@@ -736,7 +736,7 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 	if (qcomtee_object_marshal_in(tee_params, params, num_params, root))
 		return -1;
 
-	if (ioctl(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, buf_data))
+	if (ioctl(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, &buf_data))
 		return -1;
 
 	*result = arg->invoke.ret;
