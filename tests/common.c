@@ -14,7 +14,7 @@ static int tee_call(int fd, int op, struct tee_ioctl_buf_data *buf_data)
 	ret = ioctl(fd, op, buf_data);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	if (ret)
-		PRINT("ioctl: %s\n", strerror(errno));
+		PRINT("ioctl: %s, %d\n", strerror(errno), op);
 
 	return ret;
 }
@@ -24,11 +24,13 @@ static void *test_supplicant_worker(void *arg)
 {
 	while (1) {
 		pthread_testcancel();
-		qcomtee_object_process_one((struct qcomtee_object *)arg,
-					   tee_call);
+		if (qcomtee_object_process_one((struct qcomtee_object *)arg,
+					       tee_call)) {
+			PRINT("qcomtee_object_process_one.\n");
+			break;
+		}
 	}
 
-	PRINT("WE SHOULE NOT GET HERE!\n");
 	return NULL;
 }
 
