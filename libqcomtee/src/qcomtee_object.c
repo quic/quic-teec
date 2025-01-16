@@ -690,10 +690,11 @@ union tee_ioctl_arg {
 	struct tee_iocl_supp_recv_arg recv; /**< TEE_IOC_SUPPL_RECV. */
 };
 
-#define TEE_IOCTL_ARG_SEND_INIT(arg, r, n)    \
-	do {                                  \
-		(arg)->send.num_params = (n); \
-		(arg)->send.ret = (r);        \
+#define TEE_IOCTL_ARG_SEND_INIT(arg, r, n)        \
+	do {                                      \
+		/* +1 for the output meta. */     \
+		(arg)->send.num_params = (n) + 1; \
+		(arg)->send.ret = (r);            \
 	} while (0)
 
 #define qcomtee_arg_alloca(np)               \
