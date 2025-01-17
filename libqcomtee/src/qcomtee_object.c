@@ -597,9 +597,14 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 	for (i = 0; i < num_params; i++) {
 		switch (tee_params[i].attr) {
 		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_INPUT:
-			params[i].attr = QCOMTEE_UBUF_INPUT;
+		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT:
 			params[i].ubuf.addr = (void *)tee_params[i].a;
 			params[i].ubuf.size = (size_t)tee_params[i].b;
+			params[i].attr =
+				(tee_params[i].attr ==
+				 TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_INPUT) ?
+					QCOMTEE_UBUF_INPUT :
+					QCOMTEE_UBUF_OUTPUT;
 
 			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT:
@@ -610,10 +615,13 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 				failed = 1;
 
 			break;
-		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT:
+
 		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT:
-		default:
-			failed = 1;
+			params[i].attr = QCOMTEE_OBJREF_INPUT;
+
+			break;
+		default: /* NEVER GET HERE! */
+			break;
 		}
 	}
 
@@ -647,14 +655,18 @@ static int qcomtee_object_cb_marshal_out(struct tee_ioctl_param *tee_params,
 	for (i = 0; i < num_params; i++) {
 		switch (params[i].attr) {
 		case QCOMTEE_UBUF_OUTPUT:
-			tee_params[i].attr =
-				TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT;
+			if (tee_params[i].attr !=
+			    TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT)
+				return -1;
+
 			tee_params[i].a = (uintptr_t)params[i].ubuf.addr;
 			tee_params[i].b = params[i].ubuf.size;
 			break;
 		case QCOMTEE_OBJREF_OUTPUT:
-			tee_params[i].attr =
-				TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT;
+			if (tee_params[i].attr !=
+			    TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT)
+				return -1;
+
 			if (qcomtee_object_param_to_tee_param(&tee_params[i],
 							      &params[i], root))
 				return -1;
@@ -663,7 +675,7 @@ static int qcomtee_object_cb_marshal_out(struct tee_ioctl_param *tee_params,
 		case QCOMTEE_UBUF_INPUT:
 		case QCOMTEE_OBJREF_INPUT:
 		default:
-			return -1;
+			break;
 		}
 	}
 
@@ -810,7 +822,7 @@ static int qcomtee_object_dispatch_request(struct qcomtee_object *object,
 		return WITHOUT_RESPONSE;
 
 	default:
-		res = object->ops->dispatch(object, op, params, &np);
+		res = object->ops->dispatch(object, op, params, np);
 		if (res != QCOMTEE_OK) {
 			TEE_IOCTL_ARG_SEND_INIT(arg, res, 0);
 			return WITH_RESPONSE_NO_NOTIFY;

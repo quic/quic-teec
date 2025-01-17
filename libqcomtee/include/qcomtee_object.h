@@ -165,18 +165,14 @@ struct qcomtee_object_ops {
 	 * @param[in] object Object being invoked by QTEE.
 	 * @param[in] op Operation requested by QTEE.
 	 * @param[in,out] params Parameter array for the invocation.
-	 * @param[in,out] num Number of parameters in the params array.
-	 *
-	 * The size of the parameter array is always %ref QCOMTEE_OBJECT_PARAMS_MAX.
-	 * However, num specifies the number of valid entries upon entry and
-	 * return from the dispatcher.
+	 * @param[in] num Number of parameters in the params array.
 	 *
 	 * @return On success returns @ref QCOMTEE_OK;
 	 *         Otherwise a number; see @ref qcomtee_errno.h. 
 	 */
 	qcomtee_result_t (*dispatch)(struct qcomtee_object *object,
 				     qcomtee_op_t op,
-				     struct qcomtee_param *params, int *num);
+				     struct qcomtee_param *params, int num);
 
 	/**
 	 * @brief Notify the object of the transport state.
