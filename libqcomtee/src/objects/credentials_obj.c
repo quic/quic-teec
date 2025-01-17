@@ -89,29 +89,40 @@ static void qcomtee_object_credentials_release(struct qcomtee_object *object)
 	free(qcomtee_cred);
 }
 
+#define MIN_SIZE_T(a, b) ((a) < (b) ? (a) : (b))
+
 static qcomtee_result_t
 qcomtee_object_credentials_dispatch(struct qcomtee_object *object,
 				    qcomtee_op_t op,
-				    struct qcomtee_param *params, int *num)
+				    struct qcomtee_param *params, int num)
 {
 	struct qcomtee_credentials *qcomtee_cred = CREDENTIALS(object);
 
 	switch (op) {
 	case IIO_OP_GET_LENGTH:
-		params[0].attr = QCOMTEE_UBUF_OUTPUT;
+		/* Expect one argument: ouput buffer. */
+		if (num != 1 || params[0].attr != QCOMTEE_UBUF_OUTPUT)
+			return QCOMTEE_ERROR_INVALID;
+
 		params[0].ubuf.addr = &qcomtee_cred->ubuf.size;
 		params[0].ubuf.size = sizeof(qcomtee_cred->ubuf.size);
 
 		break;
 	case IIO_OP_READ_AT_OFFSET: {
-		uint64_t offset = *((uint64_t *)(params[0].ubuf.addr));
+		uint64_t offset;
 
+		/* Expect two arguments: input and outout buffer. */
+		if (num != 2 || params[0].attr != QCOMTEE_UBUF_INPUT ||
+		    params[1].attr != QCOMTEE_UBUF_OUTPUT)
+			return QCOMTEE_ERROR_INVALID;
+
+		offset = *((uint64_t *)(params[0].ubuf.addr));
 		if (offset >= qcomtee_cred->ubuf.size)
 			return QCOMTEE_ERROR_INVALID;
 
-		params[0].attr = QCOMTEE_UBUF_OUTPUT;
-		params[0].ubuf.addr = qcomtee_cred->ubuf.addr + offset;
-		params[0].ubuf.size = qcomtee_cred->ubuf.size - offset;
+		params[1].ubuf.addr = qcomtee_cred->ubuf.addr + offset;
+		params[1].ubuf.size = MIN_SIZE_T(
+			qcomtee_cred->ubuf.size - offset, params[1].ubuf.size);
 
 		break;
 	}
@@ -119,8 +130,6 @@ qcomtee_object_credentials_dispatch(struct qcomtee_object *object,
 		/* NEVER GET HERE! */
 		return QCOMTEE_ERROR_INVALID;
 	}
-
-	*num = 1; /* Return one parameter. */
 
 	return QCOMTEE_OK;
 }
