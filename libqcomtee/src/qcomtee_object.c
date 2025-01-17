@@ -26,15 +26,6 @@
 #define DISP_BUFFER 1024
 
 /**
- * @def DISP_PARAMS_MAX
- * @brief Maximum number of parameters that can fit into the buffer of
- *        size @ref DISP_BUFFER.
- *
- * Plus one for the meta parameters.
- */
-#define DISP_PARAMS_MAX (QCOMTEE_OBJECT_PARAMS_MAX + 1)
-
-/**
  * @brief Initialize an object.
  * @param object Object to initialize.
  * @param object_type Type of the object.
@@ -391,7 +382,7 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 	struct qcomtee_object *object = param->object;
 
 	/* It expects caller to set tee_param attribute. */
-	if (tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT ||
+	if (tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT &&
 	    tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT)
 		return -1;
 
@@ -606,9 +597,14 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 	for (i = 0; i < num_params; i++) {
 		switch (tee_params[i].attr) {
 		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_INPUT:
-			params[i].attr = QCOMTEE_UBUF_INPUT;
+		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT:
 			params[i].ubuf.addr = (void *)tee_params[i].a;
 			params[i].ubuf.size = (size_t)tee_params[i].b;
+			params[i].attr =
+				(tee_params[i].attr ==
+				 TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_INPUT) ?
+					QCOMTEE_UBUF_INPUT :
+					QCOMTEE_UBUF_OUTPUT;
 
 			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT:
@@ -619,10 +615,13 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 				failed = 1;
 
 			break;
-		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT:
+
 		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT:
-		default:
-			failed = 1;
+			params[i].attr = QCOMTEE_OBJREF_INPUT;
+
+			break;
+		default: /* NEVER GET HERE! */
+			break;
 		}
 	}
 
@@ -656,14 +655,18 @@ static int qcomtee_object_cb_marshal_out(struct tee_ioctl_param *tee_params,
 	for (i = 0; i < num_params; i++) {
 		switch (params[i].attr) {
 		case QCOMTEE_UBUF_OUTPUT:
-			tee_params[i].attr =
-				TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT;
+			if (tee_params[i].attr !=
+			    TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT)
+				return -1;
+
 			tee_params[i].a = (uintptr_t)params[i].ubuf.addr;
 			tee_params[i].b = params[i].ubuf.size;
 			break;
 		case QCOMTEE_OBJREF_OUTPUT:
-			tee_params[i].attr =
-				TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT;
+			if (tee_params[i].attr !=
+			    TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT)
+				return -1;
+
 			if (qcomtee_object_param_to_tee_param(&tee_params[i],
 							      &params[i], root))
 				return -1;
@@ -672,7 +675,7 @@ static int qcomtee_object_cb_marshal_out(struct tee_ioctl_param *tee_params,
 		case QCOMTEE_UBUF_INPUT:
 		case QCOMTEE_OBJREF_INPUT:
 		default:
-			return -1;
+			break;
 		}
 	}
 
@@ -690,15 +693,22 @@ union tee_ioctl_arg {
 	struct tee_iocl_supp_recv_arg recv; /**< TEE_IOC_SUPPL_RECV. */
 };
 
-#define TEE_IOCTL_ARG_SEND_INIT(arg, r, n)    \
-	do {                                  \
-		(arg)->send.num_params = (n); \
-		(arg)->send.ret = (r);        \
+#define TEE_IOCTL_ARG_SEND_INIT(arg, r, n)        \
+	do {                                      \
+		/* +1 for the output meta. */     \
+		(arg)->send.num_params = (n) + 1; \
+		(arg)->send.ret = (r);            \
 	} while (0)
 
-#define qcomtee_arg_alloca(np)               \
-	alloca(sizeof(union tee_ioctl_arg) + \
-	       (np) * sizeof(struct tee_ioctl_param))
+#define qcomtee_arg_alloca(np)                                     \
+	({                                                         \
+		size_t sz = sizeof(union tee_ioctl_arg) +          \
+			    (np) * sizeof(struct tee_ioctl_param); \
+		memset(alloca(sz), 0, sz);                         \
+	})
+
+/* Plus one for the meta parameters. */
+#define DISP_PARAMS_MAX (QCOMTEE_OBJECT_PARAMS_MAX + 1)
 
 /* Direct object invocation. */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
@@ -711,7 +721,7 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 	union tee_ioctl_arg *arg;
 
 	/* Use can only invoke QTEE object ot root object. */
-	if (object->object_type != QCOMTEE_OBJECT_TYPE_ROOT ||
+	if (object->object_type != QCOMTEE_OBJECT_TYPE_ROOT &&
 	    object->object_type != QCOMTEE_OBJECT_TYPE_TEE)
 		return -1;
 	/* QTEE does not support more than 64 parameter. */
@@ -736,7 +746,7 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 	if (qcomtee_object_marshal_in(tee_params, params, num_params, root))
 		return -1;
 
-	if (ioctl(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, buf_data))
+	if (ioctl(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, &buf_data))
 		return -1;
 
 	*result = arg->invoke.ret;
@@ -812,7 +822,7 @@ static int qcomtee_object_dispatch_request(struct qcomtee_object *object,
 		return WITHOUT_RESPONSE;
 
 	default:
-		res = object->ops->dispatch(object, op, params, &np);
+		res = object->ops->dispatch(object, op, params, np);
 		if (res != QCOMTEE_OK) {
 			TEE_IOCTL_ARG_SEND_INIT(arg, res, 0);
 			return WITH_RESPONSE_NO_NOTIFY;
