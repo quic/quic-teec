@@ -698,8 +698,10 @@ union tee_ioctl_arg {
 	} while (0)
 
 #define qcomtee_arg_alloca(np)               \
-	alloca(sizeof(union tee_ioctl_arg) + \
-	       (np) * sizeof(struct tee_ioctl_param))
+	({ \
+	size_t sz = sizeof(union tee_ioctl_arg) + (np) * sizeof(struct tee_ioctl_param) ; \
+	memset(alloca(sz), 0, sz); \
+	})
 
 /* Direct object invocation. */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
