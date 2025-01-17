@@ -141,7 +141,9 @@ typedef enum {
 
 /**
  * @def QCOMTEE_OBJECT_PARAMS_MAX
- * @brief Size of parameter array pass to the dispatcher.
+ * @brief Size of parameter array minus one passed to the dispatcher.
+ *
+ * This is allocated on the stack; use your best judgment.
  */
 #define QCOMTEE_OBJECT_PARAMS_MAX 10
 

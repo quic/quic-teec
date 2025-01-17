@@ -26,15 +26,6 @@
 #define DISP_BUFFER 1024
 
 /**
- * @def DISP_PARAMS_MAX
- * @brief Maximum number of parameters that can fit into the buffer of
- *        size @ref DISP_BUFFER.
- *
- * Plus one for the meta parameters.
- */
-#define DISP_PARAMS_MAX (QCOMTEE_OBJECT_PARAMS_MAX + 1)
-
-/**
  * @brief Initialize an object.
  * @param object Object to initialize.
  * @param object_type Type of the object.
@@ -697,11 +688,15 @@ union tee_ioctl_arg {
 		(arg)->send.ret = (r);            \
 	} while (0)
 
-#define qcomtee_arg_alloca(np)               \
-	({ \
-	size_t sz = sizeof(union tee_ioctl_arg) + (np) * sizeof(struct tee_ioctl_param) ; \
-	memset(alloca(sz), 0, sz); \
+#define qcomtee_arg_alloca(np)                                     \
+	({                                                         \
+		size_t sz = sizeof(union tee_ioctl_arg) +          \
+			    (np) * sizeof(struct tee_ioctl_param); \
+		memset(alloca(sz), 0, sz);                         \
 	})
+
+/* Plus one for the meta parameters. */
+#define DISP_PARAMS_MAX (QCOMTEE_OBJECT_PARAMS_MAX + 1)
 
 /* Direct object invocation. */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
