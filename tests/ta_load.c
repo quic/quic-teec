@@ -15,16 +15,16 @@ static int test_ta_cmd_0(struct qcomtee_object *ta)
 	} num;
 	uint32_t sum;
 
-	/* Get two number. */
+	/* Get two number smaller than 100. */
 	srand(time(NULL));
-	num.num1 = rand();
-	num.num2 = rand();
+	num.num1 = rand() % 100;
+	num.num2 = rand() % 100;
 
 	/* INIT parameters and invoke object: */
 	params[0].attr = QCOMTEE_UBUF_INPUT;
 	params[0].ubuf = UBUF_INIT(&num);
 	params[1].attr = QCOMTEE_UBUF_OUTPUT;
-	params[0].ubuf = UBUF_INIT(&sum);
+	params[1].ubuf = UBUF_INIT(&sum);
 	/* 0 is ISMCIExample_OP_add. */
 	if (qcomtee_object_invoke(ta, 0, params, 2, &result) ||
 	    (result != QCOMTEE_OK))
@@ -33,8 +33,9 @@ static int test_ta_cmd_0(struct qcomtee_object *ta)
 	if (num.num1 + num.num2 == sum)
 		return 0;
 
-	PRINT("%u + %u is %u but returned %u\n", num.num1, num.num2,
+	PRINT("%u + %u is %u but TA returned %u\n", num.num1, num.num2,
 	      num.num1 + num.num2, sum);
+
 	return -1;
 }
 

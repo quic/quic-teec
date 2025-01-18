@@ -21,10 +21,10 @@ int main(int argc, char *argv[])
 		test_print_diagnostics_info();
 		break;
 	case 'l':
-		if (argc != 3)
+		if (argc != 4)
 			goto help;
 
-		test_load_sample_ta(argv[1], atoi(argv[2]));
+		test_load_sample_ta(argv[2], atoi(argv[3]));
 		break;
 help:
 	case 'h':

@@ -149,7 +149,7 @@ size_t test_get_file_size(FILE *file)
 {
 	ssize_t size;
 
-	if (fseek(file, 0L, SEEK_END)) {
+	if (fseek(file, 0, SEEK_END)) {
 		PRINT("%s\n", strerror(errno));
 		return -1;
 	}
@@ -158,6 +158,11 @@ size_t test_get_file_size(FILE *file)
 	if (size < 0) {
 		PRINT("%s\n", strerror(errno));
 		return 0;
+	}
+
+	if (fseek(file, 0, SEEK_SET)) {
+		PRINT("%s\n", strerror(errno));
+		return -1;
 	}
 
 	return size;
@@ -185,6 +190,8 @@ int test_read_file(const char *filename, char **buffer, size_t *size)
 		PRINT("malloc,\n");
 		goto out;
 	}
+
+	PRINT("File %s, size: %lu Bytes.\n", filename, file_size);
 
 	if (fread(file_buf, 1, file_size, file) != file_size) {
 		PRINT("fread.\n");

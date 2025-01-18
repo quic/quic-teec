@@ -51,12 +51,12 @@ void test_print_diagnostics_info(void)
 		goto dec_service_object;
 	}
 
-	PRINT("%d = Total bytes as heap\n", heap_info.total_size);
-	PRINT("%d = Total bytes allocated from heap\n", heap_info.used_size);
-	PRINT("%d = Total bytes free on heap\n", heap_info.free_size);
-	PRINT("%d = Total bytes overhead\n", heap_info.overhead_size);
-	PRINT("%d = Total bytes wasted\n", heap_info.wasted_size);
-	PRINT("%d = Largest free block size\n\n",
+	PRINT("%-15d = Total bytes as heap\n", heap_info.total_size);
+	PRINT("%-15d = Total bytes allocated from heap\n", heap_info.used_size);
+	PRINT("%-15d = Total bytes free on heap\n", heap_info.free_size);
+	PRINT("%-15d = Total bytes overhead\n", heap_info.overhead_size);
+	PRINT("%-15d = Total bytes wasted\n", heap_info.wasted_size);
+	PRINT("%-15d = Largest free block size\n\n",
 	      heap_info.largest_free_block_size);
 
 	PRINT("SUCCESS.\n");
