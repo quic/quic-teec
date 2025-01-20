@@ -265,22 +265,18 @@ void qcomtee_object_refs_dec(struct qcomtee_object *object);
 
 /**
  * @brief Create a root object.
- * @param close_call Called on destruction of this root object.
- * @param close_arg Argument passed to close_call.
+ * @param dev TEE device file pathname.
+ * @param release Called on destruction of this root object.
+ * @param arg Argument passed to release.
  *
  * It creates a new namespace. To release a root object,
  * use @ref qcomtee_object_refs_dec.
- *
- * The close_call is used to further clean up resources where their lifetime
- * is linked to the root object. It must not make a call to any function
- * (such as @ref qcomtee_object_invoke) that uses the root object.
  * 
  * @return On success, returns the object;
  *         Otherwise, returns @ref QCOMTEE_OBJECT_NULL.
  */
-struct qcomtee_object *qcomtee_object_root_init(const char *devname,
-						void (*close_call)(void *),
-						void *close_arg);
+struct qcomtee_object *
+qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg);
 
 /**
  * @brief Initialize a callback objet.
@@ -318,14 +314,12 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
  * the actual request being processed.
  * 
  * This function calls the random object's @ref qcomtee_object_ops::dispatch
- * operation. Therefore, if it is being executed by a thread, it is not
- * safe to cancel the thread asynchronously. For instance, we cannot use
- * PTHREAD_CANCEL_ASYNCHRONOUS for the thread and call pthread_cancel.
+ * operation. Therefore, if it is being executed by a pthread, it is not
+ * safe to use PTHREAD_CANCEL_ASYNCHRONOUS.
  *
  * The tee_call function should implement support for reading a new request
  * (i.e., TEE_IOC_SUPPL_RECV) and submitting the response
- * (i.e., TEE_IOC_SUPPL_SEND). Users can implement the logic for the
- * asynchronous termination of a thread in tee_call if needed.
+ * (i.e., TEE_IOC_SUPPL_SEND).
  * 
  * @param root The root object for which the request queue is checked.
  * @param tee_call Read a request and submit response to kernel driver.
