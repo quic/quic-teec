@@ -15,20 +15,18 @@ struct diagnostics_heap_info {
 void test_print_diagnostics_info(void)
 {
 	struct diagnostics_heap_info heap_info;
-	struct qcomtee_object *client_env_object, *service_object;
+	struct qcomtee_object *root, *client_env_object, *service_object;
 	struct qcomtee_param params[1];
 	qcomtee_result_t result;
 
-	struct supplicant *sup;
-
-	/* Start a fresh namespace with supplicant. */
-	sup = test_supplicant_start(1);
-	if (!sup) {
-		PRINT("test_supplicant_start.\n");
+	/* Get root + supplicant. */
+	root = test_get_root();
+	if (root == QCOMTEE_OBJECT_NULL) {
+		PRINT("test_get_root.\n");
 		return;
 	}
 
-	client_env_object = test_get_client_env_object(sup->root);
+	client_env_object = test_get_client_env_object(root);
 	if (client_env_object == QCOMTEE_OBJECT_NULL) {
 		PRINT("test_get_client_env_object.\n");
 		goto dec_root_object;
@@ -66,5 +64,5 @@ dec_service_object:
 dec_client_env_object:
 	qcomtee_object_refs_dec(client_env_object);
 dec_root_object:
-	qcomtee_object_refs_dec(sup->root);
+	qcomtee_object_refs_dec(root);
 }
