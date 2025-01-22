@@ -197,17 +197,8 @@ struct root_object {
 	struct qcomtee_object object;
 	struct qcomtee_object_namespace ns;
 	int fd; /**< Driver's fd. */
-
-	/**
-	 * @brief Callback on root object destruction.
-	 * @param Argument is @ref root_object::arg set by user.
-	 *
-	 * This is called when the root object reference count reaches zero,
-	 * which guarantees that no QTEE or callback object exists in
-	 * this namespace.
-	 */
-	void (*close_call)(void *);
-	void *arg; /**< Argument passed to close_call. */
+	void (*release)(void *);
+	void *arg; /**< Argument passed to release. */
 };
 
 #define ROOT_OBJECT(ro) container_of((ro), struct root_object, object)
@@ -223,16 +214,16 @@ static void qcomtee_object_root_release(struct qcomtee_object *object)
 {
 	struct root_object *root_object = ROOT_OBJECT(object);
 
-	if (root_object->close_call)
-		root_object->close_call(root_object->arg);
+	if (root_object->release)
+		root_object->release(root_object->arg);
+
 	close(root_object->fd);
 	pthread_mutex_destroy(&root_object->ns.lock);
 	free(root_object);
 }
 
-struct qcomtee_object *qcomtee_object_root_init(const char *devname,
-						void (*close_call)(void *),
-						void *close_arg)
+struct qcomtee_object *
+qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg)
 {
 	struct root_object *root_object;
 	static struct qcomtee_object_ops qcomtee_object_root_ops = {
@@ -249,7 +240,7 @@ struct qcomtee_object *qcomtee_object_root_init(const char *devname,
 	root_object->object.ops = &qcomtee_object_root_ops;
 	root_object->object.root = &root_object->object;
 	/* Open the driver. */
-	root_object->fd = open(devname, O_RDWR);
+	root_object->fd = open(dev, O_RDWR);
 	if (root_object->fd < 0)
 		goto failed_out;
 
@@ -257,9 +248,9 @@ struct qcomtee_object *qcomtee_object_root_init(const char *devname,
 	root_object->ns.current_idx = 0;
 	memset(root_object->ns.entries, 0, sizeof(root_object->ns.entries));
 	pthread_mutex_init(&root_object->ns.lock, NULL);
-	/* Cleanup. */
-	root_object->close_call = close_call;
-	root_object->arg = close_arg;
+
+	root_object->release = release;
+	root_object->arg = arg;
 
 	return root_object->object.root;
 
@@ -617,7 +608,7 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 			break;
 
 		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT:
-			params[i].attr = QCOMTEE_OBJREF_INPUT;
+			params[i].attr = QCOMTEE_OBJREF_OUTPUT;
 
 			break;
 		default: /* NEVER GET HERE! */

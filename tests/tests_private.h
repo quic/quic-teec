@@ -14,32 +14,11 @@
 #define DEV_TEE "/dev/tee0"
 
 /**
- * @def SUPPLICANT_THREADS
- * @brief Maximum number of threads in a supplicant.
+ * @brief Get a root object.
+ * @return On success, returns the object;
+ *         Otherwise, returns @ref QCOMTEE_OBJECT_NULL.
  */
-#define SUPPLICANT_THREADS 4
-
-#define SUPPLICANT_DEAD 0
-#define SUPPLICANT_RUNNING 1
-struct supplicant {
-	int pthreads_num;
-	struct {
-		int state;
-		pthread_t thread;
-	} pthreads[SUPPLICANT_THREADS];
-	struct qcomtee_object *root;
-};
-
-/**
- * @brief Start a supplicant.
- *
- * Number of threads should be [1 to @ref SUPPLICANT_THREADS].
- *
- * @param pthreads_num Number of threads.
- * @return On success, returns instance of @ref supplicant;
- *         Otherwise, return NULL.
- */
-struct supplicant *test_supplicant_start(int pthreads_num);
+struct qcomtee_object *test_get_root(void);
 
 /**
  * @brief Get a client environment object.

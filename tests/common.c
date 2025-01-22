@@ -5,6 +5,11 @@
 #include <sys/ioctl.h>
 #include "tests_private.h"
 
+struct supplicant {
+	pthread_t thread;
+	struct qcomtee_object *root;
+};
+
 /* op is TEE_IOC_SUPPL_RECV or TEE_IOC_SUPPL_SEND. */
 static int tee_call(int fd, int op, struct tee_ioctl_buf_data *buf_data)
 {
@@ -19,83 +24,71 @@ static int tee_call(int fd, int op, struct tee_ioctl_buf_data *buf_data)
 	return ret;
 }
 
-/* arg is the root object. */
+/* arg is the instance of supplicant. */
 static void *test_supplicant_worker(void *arg)
 {
+	struct supplicant *sup = (struct supplicant *)arg;
+
 	while (1) {
 		pthread_testcancel();
-		if (qcomtee_object_process_one((struct qcomtee_object *)arg,
-					       tee_call)) {
-			PRINT("qcomtee_object_process_one.\n");
+		if (qcomtee_object_process_one(sup->root, tee_call))
 			break;
-		}
 	}
+
+	PRINT("qcomtee_object_process_one.\n");
 
 	return NULL;
 }
 
-/* arg is the instance of supplicant*/
+/* arg is the instance of supplicant. */
 static void test_supplicant_release(void *arg)
 {
 	struct supplicant *sup = (struct supplicant *)arg;
-	int i;
 
-	/* Here, we are sure there is no QTEE or callback object. In other
-	 * words, there should not be anyone calling qcomtee_object_invoke
-	 * or any request pending from QTEE. We issue the pthread_cancel
-	 * and wait for the thread to get cancelled at pthread_testcancel or
-	 * get cancelled in tee_call asynchronously.
+	/* Here, we are sure there is no QTEE or callback object.
+	 * We issue the pthread_cancel and wait for the thread to get cancelled
+	 * at pthread_testcancel or in tee_call.
 	 */
 
-	for (i = 0; i < sup->pthreads_num; i++) {
-		if (!sup->pthreads[i].state)
-			pthread_cancel(sup->pthreads[i].thread);
+	if (sup->thread) {
+		pthread_cancel(sup->thread);
+		pthread_join(sup->thread, NULL);
 	}
-
-	for (i = 0; i < sup->pthreads_num; i++)
-		if (!sup->pthreads[i].state)
-			pthread_join(sup->pthreads[i].thread, NULL);
 
 	PRINT("test_supplicant_worker killed.\n");
 	free(sup);
 }
 
-struct supplicant *test_supplicant_start(int pthreads_num)
+struct qcomtee_object *test_get_root(void)
 {
-	int i, success = 0;
+	struct qcomtee_object *root;
 	struct supplicant *sup;
+	pthread_t thread;
 
-	if (pthreads_num > SUPPLICANT_THREADS)
-		return NULL;
-
-	/* INIT all threads as SUPPLICANT_DEAD. */
 	sup = calloc(1, sizeof(*sup));
 	if (!sup)
-		return NULL;
+		return QCOMTEE_OBJECT_NULL;
 
 	/* Start a fresh namespace. */
-	sup->root =
-		qcomtee_object_root_init(DEV_TEE, test_supplicant_release, sup);
-	if (sup->root == QCOMTEE_OBJECT_NULL)
+	root = qcomtee_object_root_init(DEV_TEE, test_supplicant_release, sup);
+	if (root == QCOMTEE_OBJECT_NULL)
 		goto failed_out;
 
-	sup->pthreads_num = pthreads_num;
-	/* Start supplicant threads. */
-	for (i = 0; i < sup->pthreads_num; i++) {
-		if (!pthread_create(&sup->pthreads[i].thread, NULL,
-				    test_supplicant_worker, sup->root)) {
-			sup->pthreads[i].state = SUPPLICANT_RUNNING;
-			success = 1;
-		}
-	}
+	sup->root = root;
 
-	/* Success, if at least one thread has been started. */
-	if (success)
-		return sup;
+	/* Start a supplicant thread. */
+	if (pthread_create(&thread, NULL, test_supplicant_worker, sup))
+		goto failed_out;
+
+	sup->thread = thread;
+
+	return root;
+
 failed_out:
+	qcomtee_object_refs_dec(root);
 	free(sup);
 
-	return NULL;
+	return QCOMTEE_OBJECT_NULL;
 }
 
 struct qcomtee_object *test_get_client_env_object(struct qcomtee_object *root)
