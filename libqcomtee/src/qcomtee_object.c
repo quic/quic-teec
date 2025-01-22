@@ -608,7 +608,7 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 			break;
 
 		case TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT:
-			params[i].attr = QCOMTEE_OBJREF_INPUT;
+			params[i].attr = QCOMTEE_OBJREF_OUTPUT;
 
 			break;
 		default: /* NEVER GET HERE! */
