@@ -890,11 +890,12 @@ int qcomtee_object_process_one(struct qcomtee_object *root,
 	if (object == QCOMTEE_OBJECT_NULL) {
 		TEE_IOCTL_ARG_SEND_INIT(arg, QCOMTEE_ERROR_DEFUNCT, 0);
 		err = WITH_RESPONSE_NO_NOTIFY;
+
 	} else {
 		/* Is there any response we should send!?*/
 		err = qcomtee_object_dispatch_request(object, arg, root);
 		if (err == WITHOUT_RESPONSE)
-			return 0;
+			goto out;
 	}
 
 	/* INIT IOCTL arguments for send. */
@@ -928,6 +929,7 @@ int qcomtee_object_process_one(struct qcomtee_object *root,
 			object->ops->error(object, err);
 	}
 
+out:
 	qcomtee_object_refs_dec(object);
 
 	return 0;
