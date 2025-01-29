@@ -32,6 +32,7 @@ add_library(qcomtee ${SRC})
 
 # ''Library pkg-config file and version''.
 
+set(pc_req_private qcbor)
 set(libqcomteetgt qcomtee)
 
 configure_file(qcomtee.pc.in qcomtee.pc @ONLY)
