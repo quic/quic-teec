@@ -4,8 +4,8 @@
 #ifndef _QCOMTEE_OBJECT_H
 #define _QCOMTEE_OBJECT_H
 
+#include <stdarg.h>
 #include <stdatomic.h>
-#include <linux/tee.h>
 #include "qcomtee_errno.h"
 
 #include <stdio.h>
@@ -319,7 +319,6 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
  * @return On success, 0; Otherwise, returns -1.
  */
 int qcomtee_object_process_one(struct qcomtee_object *root,
-			       int (*tee_call)(int, int,
-					       struct tee_ioctl_buf_data *));
+			       int (*tee_call)(int, int, ...));
 
 #endif // _QCOMTEE_OBJECT_H

@@ -1,8 +1,10 @@
 // Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
+#include <pthread.h>
 #include <stdarg.h>
 #include <sys/ioctl.h>
+
 #include "tests_private.h"
 
 struct supplicant {
@@ -11,12 +13,17 @@ struct supplicant {
 };
 
 /* op is TEE_IOC_SUPPL_RECV or TEE_IOC_SUPPL_SEND. */
-static int tee_call(int fd, int op, struct tee_ioctl_buf_data *buf_data)
+static int tee_call(int fd, int op, ...)
 {
+	va_list ap;
 	int ret;
 
+	va_start(ap, op);
+	void *arg = va_arg(ap, void *);
+	va_end(ap);
+
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-	ret = ioctl(fd, op, buf_data);
+	ret = ioctl(fd, op, arg);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	if (ret)
 		PRINT("ioctl: %s, %d\n", strerror(errno), op);

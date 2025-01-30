@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
+#include <linux/tee.h>
 #include <qcomtee_object.h>
 
 /**
@@ -834,8 +835,7 @@ static int qcomtee_object_dispatch_request(struct qcomtee_object *object,
 }
 
 int qcomtee_object_process_one(struct qcomtee_object *root,
-			       int (*tee_call)(int, int,
-					       struct tee_ioctl_buf_data *))
+			       int (*tee_call)(int, int, ...))
 {
 	struct tee_ioctl_buf_data buf_data;
 	struct tee_ioctl_param *tee_params;
