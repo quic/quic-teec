@@ -27,6 +27,6 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
-	PRIVATE libqcomtee
+	PRIVATE qcomtee
 	PRIVATE ${CMAKE_THREAD_LIBS_INIT}
 )
