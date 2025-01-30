@@ -8,17 +8,10 @@
 #include <linux/tee.h>
 #include "qcomtee_errno.h"
 
-#ifdef OE
-#include <syslog.h>
-#define MSGV(...) syslog(LOG_NOTICE, "INFO:" __VA_ARGS__)
-#define MSGD(...) syslog(LOG_DEBUG, "INFO:" __VA_ARGS__)
-#define MSGE(...) syslog(LOG_ERR, "ERR:" __VA_ARGS__)
-#else
 #include <stdio.h>
 #define MSGV printf
 #define MSGD printf
 #define MSGE printf
-#endif
 
 typedef uint32_t qcomtee_op_t;
 

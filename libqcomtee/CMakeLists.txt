@@ -17,10 +17,6 @@ endif()
 
 include_directories(${QCBOR_INCLUDE_DIRS})
 
-# ''Configurations''.
-
-option(CFG_USE_SYSLOG "Use syslog" FALSE)
-
 # ''Source files''.
 
 set(SRC
@@ -28,39 +24,34 @@ set(SRC
         src/objects/credentials_obj.c
 )
 
-add_library(qcomtee ${SRC})
+add_library(${PROJECT_NAME} ${SRC})
 
 # ''Library pkg-config file and version''.
 
+set(pc_req_private qcbor)
 set(libqcomteetgt qcomtee)
 
 configure_file(qcomtee.pc.in qcomtee.pc @ONLY)
 
-set_target_properties(qcomtee PROPERTIES
+set_target_properties(${PROJECT_NAME} PROPERTIES
 	VERSION ${PROJECT_VERSION}
 	SOVERSION ${PROJECT_VERSION_MAJOR}
 )
 
-# ''Compile flags''.
-
-if(CFG_USE_SYSLOG)
-        target_compile_definitions(qcomtee PRIVATE -DOE)
-endif()
-
 # ''Headers and dependencies''.
 
-target_include_directories(qcomtee
+target_include_directories(${PROJECT_NAME}
 	PUBLIC include
 	PRIVATE src
 )
 
-target_link_libraries(qcomtee
+target_link_libraries(${PROJECT_NAME}
 	PRIVATE ${QCBOR_LIBRARIES}
 )
 
 # ''Install targets''.
 
-install(TARGETS qcomtee
+install(TARGETS ${PROJECT_NAME}
 	LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 	ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 )

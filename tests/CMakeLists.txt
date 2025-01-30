@@ -1,5 +1,12 @@
 project(unittest C)
 
+# ''Packages''.
+
+find_package(Threads REQUIRED)
+if(NOT THREADS_FOUND)
+	message(FATAL_ERROR "Threads not found")
+endif()
+
 # ''Source files''.
 
 set(SRC
@@ -21,5 +28,6 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
-	PRIVATE qcomtee
+	PRIVATE libqcomtee
+	PRIVATE ${CMAKE_THREAD_LIBS_INIT}
 )
