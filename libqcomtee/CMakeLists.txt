@@ -24,7 +24,7 @@ set(SRC
         src/objects/credentials_obj.c
 )
 
-add_library(qcomtee ${SRC})
+add_library(${PROJECT_NAME} ${SRC})
 
 # ''Library pkg-config file and version''.
 
@@ -33,25 +33,25 @@ set(libqcomteetgt qcomtee)
 
 configure_file(qcomtee.pc.in qcomtee.pc @ONLY)
 
-set_target_properties(qcomtee PROPERTIES
+set_target_properties(${PROJECT_NAME} PROPERTIES
 	VERSION ${PROJECT_VERSION}
 	SOVERSION ${PROJECT_VERSION_MAJOR}
 )
 
 # ''Headers and dependencies''.
 
-target_include_directories(qcomtee
+target_include_directories(${PROJECT_NAME}
 	PUBLIC include
 	PRIVATE src
 )
 
-target_link_libraries(qcomtee
+target_link_libraries(${PROJECT_NAME}
 	PRIVATE ${QCBOR_LIBRARIES}
 )
 
 # ''Install targets''.
 
-install(TARGETS qcomtee
+install(TARGETS ${PROJECT_NAME}
 	LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 	ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 )
