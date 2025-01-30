@@ -17,10 +17,6 @@ endif()
 
 include_directories(${QCBOR_INCLUDE_DIRS})
 
-# ''Configurations''.
-
-option(CFG_USE_SYSLOG "Use syslog" FALSE)
-
 # ''Source files''.
 
 set(SRC
@@ -41,12 +37,6 @@ set_target_properties(qcomtee PROPERTIES
 	VERSION ${PROJECT_VERSION}
 	SOVERSION ${PROJECT_VERSION_MAJOR}
 )
-
-# ''Compile flags''.
-
-if(CFG_USE_SYSLOG)
-        target_compile_definitions(qcomtee PRIVATE -DOE)
-endif()
 
 # ''Headers and dependencies''.
 
