@@ -5,7 +5,6 @@
 #define _TESTS_PRIVATE_H
 
 #include <string.h>
-#include <pthread.h>
 #include <stdlib.h>
 
 #include <qcomtee_object_types.h>
