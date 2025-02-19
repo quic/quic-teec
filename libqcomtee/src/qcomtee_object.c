@@ -267,7 +267,7 @@ static void qcomtee_object_tee_release(struct qcomtee_object *object)
 	qcomtee_result_t result;
 
 	if (qcomtee_object_invoke(object, QCOMTEE_OBJREF_OP_RELEASE, NULL, 0,
-				  &result) ||
+				  &result, ioctl) ||
 	    (result != QCOMTEE_OK))
 		MSGE("QTEE object release failed!\n");
 
@@ -705,7 +705,7 @@ union tee_ioctl_arg {
 /* Direct object invocation. */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 			  struct qcomtee_param *params, int num_params,
-			  qcomtee_result_t *result)
+			  qcomtee_result_t *result, tee_call_t tee_call)
 {
 	struct qcomtee_object *root = object->root;
 	struct tee_ioctl_buf_data buf_data;
@@ -738,7 +738,7 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 	if (qcomtee_object_marshal_in(tee_params, params, num_params, root))
 		return -1;
 
-	if (ioctl(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, &buf_data))
+	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, &buf_data))
 		return -1;
 
 	*result = arg->invoke.ret;
@@ -834,8 +834,7 @@ static int qcomtee_object_dispatch_request(struct qcomtee_object *object,
 	return WITH_RESPONSE;
 }
 
-int qcomtee_object_process_one(struct qcomtee_object *root,
-			       int (*tee_call)(int, int, ...))
+int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 {
 	struct tee_ioctl_buf_data buf_data;
 	struct tee_ioctl_param *tee_params;
