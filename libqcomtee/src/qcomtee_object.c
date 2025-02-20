@@ -923,8 +923,8 @@ int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 
 	/* DONE! */
 
-	if (object != QCOMTEE_OBJECT_NULL && object->ops->error) {
-		if (err == WITH_RESPONSE_ERR || err == WITH_RESPONSE)
+	if (err == WITH_RESPONSE_ERR || err == WITH_RESPONSE) {
+		if (object->ops->error)
 			object->ops->error(object, err);
 	}
 
