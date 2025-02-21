@@ -12,6 +12,14 @@
 /* Driver's file.*/
 #define DEV_TEE "/dev/tee0"
 
+#ifdef __GLIBC__
+int tee_call(int fd, unsigned long op, ...);
+#else
+int tee_call(int fd, int op, ...);
+#endif
+
+#define test_object_invoke(...) qcomtee_object_invoke(__VA_ARGS__, tee_call)
+
 /**
  * @brief Get a root object.
  * @return On success, returns the object;

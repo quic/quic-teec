@@ -26,7 +26,7 @@ static int test_ta_cmd_0(struct qcomtee_object *ta)
 	params[1].attr = QCOMTEE_UBUF_OUTPUT;
 	params[1].ubuf = UBUF_INIT(&sum);
 	/* 0 is ISMCIExample_OP_add. */
-	if (qcomtee_object_invoke(ta, 0, params, 2, &result) ||
+	if (test_object_invoke(ta, 0, params, 2, &result) ||
 	    (result != QCOMTEE_OK))
 		return -1;
 
@@ -63,9 +63,9 @@ static struct ta test_load_ta(struct qcomtee_object *service_object,
 	params[0].ubuf.size = size;
 	params[1].attr = QCOMTEE_OBJREF_OUTPUT;
 	/* 0 is IAppLoader_OP_loadFromBuffer. */
-	if (qcomtee_object_invoke(service_object, 0, params, 2, &result) ||
+	if (test_object_invoke(service_object, 0, params, 2, &result) ||
 	    (result != QCOMTEE_OK)) {
-		PRINT("qcomtee_object_invoke.\n");
+		PRINT("test_object_invoke.\n");
 		goto failed_out;
 	}
 
@@ -74,9 +74,9 @@ static struct ta test_load_ta(struct qcomtee_object *service_object,
 	/* INIT parameters and invoke object: */
 	params[0].attr = QCOMTEE_OBJREF_OUTPUT;
 	/* 2 is IAppController_OP_getAppObject . */
-	if (qcomtee_object_invoke(ta.ta_controller, 2, params, 1, &result) ||
+	if (test_object_invoke(ta.ta_controller, 2, params, 1, &result) ||
 	    (result != QCOMTEE_OK)) {
-		PRINT("qcomtee_object_invoke.\n");
+		PRINT("test_object_invoke.\n");
 		goto failed_out;
 	}
 

@@ -11,7 +11,8 @@ static void usage(char *name)
 	       "\t-d - Run the TZ diagnostics test that prints basic info on TZ heaps.\n"
 	       "\t-l - Load the test TA and send command.\n"
 	       "\t\t%s -l <path to TA binary> <command>\n"
-	       "\t-h - Print this help message and exit\n\n", name);
+	       "\t-h - Print this help message and exit\n\n",
+	       name);
 }
 
 int main(int argc, char *argv[])

@@ -282,6 +282,12 @@ int qcomtee_object_cb_init(struct qcomtee_object *object,
 			   struct qcomtee_object_ops *ops,
 			   struct qcomtee_object *root);
 
+#ifdef __GLIBC__
+typedef int (*tee_call_t)(int, unsigned long, ...);
+#else
+typedef int (*tee_call_t)(int, int, ...);
+#endif
+
 /**
  * @brief Invoke an Object.
  *
@@ -293,11 +299,12 @@ int qcomtee_object_cb_init(struct qcomtee_object *object,
  * @param params Input parameter array to the requested operation.
  * @param num_params Number of parameter in the input array.
  * @param result Result of operation.
+ * @param tee_call Submit request to kernel driver.
  * @return On success, 0; Otherwise, returns -1.
  */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 			  struct qcomtee_param *params, int num_params,
-			  qcomtee_result_t *result);
+			  qcomtee_result_t *result, tee_call_t tee_call);
 
 /**
  * @brief Process single request.
@@ -319,6 +326,6 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
  * @return On success, 0; Otherwise, returns -1.
  */
 int qcomtee_object_process_one(struct qcomtee_object *root,
-			       int (*tee_call)(int, int, ...));
+			       tee_call_t tee_call);
 
 #endif // _QCOMTEE_OBJECT_H
