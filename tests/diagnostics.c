@@ -43,9 +43,9 @@ void test_print_diagnostics_info(void)
 	params[0].attr = QCOMTEE_UBUF_OUTPUT;
 	params[0].ubuf = UBUF_INIT(&heap_info);
 	/* 0 is IDiagnostics_OP_queryHeapInfo. */
-	if (qcomtee_object_invoke(service_object, 0, params, 1, &result) ||
+	if (test_object_invoke(service_object, 0, params, 1, &result) ||
 	    (result != QCOMTEE_OK)) {
-		PRINT("qcomtee_object_invoke.\n");
+		PRINT("test_object_invoke.\n");
 		goto dec_service_object;
 	}
 
