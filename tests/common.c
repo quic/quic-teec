@@ -14,9 +14,9 @@ struct supplicant {
 
 /* op is TEE_IOC_SUPPL_RECV or TEE_IOC_SUPPL_SEND. */
 #ifdef __GLIBC__
-int tee_call(int fd, unsigned long op, ...)
+static int tee_call(int fd, unsigned long op, ...)
 #else
-int tee_call(int fd, int op, ...)
+static int tee_call(int fd, int op, ...)
 #endif
 {
 	va_list ap;
@@ -42,7 +42,7 @@ static void *test_supplicant_worker(void *arg)
 
 	while (1) {
 		pthread_testcancel();
-		if (qcomtee_object_process_one(sup->root, tee_call))
+		if (qcomtee_object_process_one(sup->root))
 			break;
 	}
 
@@ -81,7 +81,8 @@ struct qcomtee_object *test_get_root(void)
 		return QCOMTEE_OBJECT_NULL;
 
 	/* Start a fresh namespace. */
-	root = qcomtee_object_root_init(DEV_TEE, test_supplicant_release, sup);
+	root = qcomtee_object_root_init(DEV_TEE, tee_call,
+					test_supplicant_release, sup);
 	if (root == QCOMTEE_OBJECT_NULL)
 		goto failed_out;
 
@@ -116,12 +117,12 @@ struct qcomtee_object *test_get_client_env_object(struct qcomtee_object *root)
 	params[0].object = creds_object;
 	params[1].attr = QCOMTEE_OBJREF_OUTPUT;
 	/* 2 is IClientEnv_OP_registerAsClient. */
-	if (test_object_invoke(root, 2, params, 2, &result)) {
+	if (qcomtee_object_invoke(root, 2, params, 2, &result)) {
 		qcomtee_object_refs_dec(creds_object);
 		return QCOMTEE_OBJECT_NULL;
 	}
 
-	/* test_object_invoke was successful; QTEE releases creds_object. */
+	/* qcomtee_object_invoke was successful; QTEE releases creds_object. */
 
 	if (!result)
 		return params[1].object;
@@ -140,7 +141,7 @@ test_get_service_object(struct qcomtee_object *client_env_object, uint32_t uid)
 	params[0].ubuf = UBUF_INIT(&uid);
 	params[1].attr = QCOMTEE_OBJREF_OUTPUT;
 	/* 0 is IClientEnv_OP_open. */
-	if (test_object_invoke(client_env_object, 0, params, 2, &result) ||
+	if (qcomtee_object_invoke(client_env_object, 0, params, 2, &result) ||
 	    (result != QCOMTEE_OK))
 		return QCOMTEE_OBJECT_NULL;
 
