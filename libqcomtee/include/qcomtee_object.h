@@ -207,6 +207,7 @@ struct qcomtee_object_ops {
 struct qcomtee_object {
 	atomic_int refs; /**< Number of references to this object. */
 	uint64_t object_id; /**< ID assigned to this object. */
+	uint64_t tee_object_id; /**< ID assigned to this object for QTEE. */
 	qcomtee_object_type_t object_type; /**< Object Type. */
 
 	/**
@@ -256,10 +257,23 @@ qcomtee_object_typeof(struct qcomtee_object *object)
 /**
  * @brief Increase object reference count.
  * @param object The object being incremented.
+ * @return On success, returns 0;
+ *         Otherwise, returns -1.
  */
-static inline void qcomtee_object_refs_inc(struct qcomtee_object *object)
+static inline int qcomtee_object_refs_inc(struct qcomtee_object *object)
 {
-	atomic_fetch_add(&object->refs, 1);
+	int old;
+
+	if (object == QCOMTEE_OBJECT_NULL)
+		return -1;
+
+	old = atomic_load(&object->refs);
+	do {
+		if (old == 0)
+			return -1;
+	} while (!atomic_compare_exchange_weak(&object->refs, &old, old + 1));
+
+	return 0;
 }
 
 /**
