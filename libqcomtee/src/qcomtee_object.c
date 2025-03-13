@@ -1,22 +1,11 @@
 // Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include <stdarg.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-
 #include <linux/tee.h>
-#include <qcomtee_object.h>
-
-/**
- * @def TABLE_SIZE
- * @brief The number of objects that can be exported to QTEE in each root object.
- */
-#define TABLE_SIZE 1024
+#include <qcomtee_object_private.h>
 
 /**
  * @def DISP_BUFFER
@@ -27,40 +16,10 @@
 #define DISP_BUFFER 1024
 
 /**
- * @brief Initialize an object.
- * @param object Object to initialize.
- * @param object_type Type of the object.
- */
-static inline void QCOMTEE_OBJECT_INIT(struct qcomtee_object *object,
-				       qcomtee_object_type_t object_type)
-{
-	memset(object, 0, sizeof(*object));
-
-	atomic_init(&object->refs, 1);
-	object->object_type = object_type;
-	object->root = QCOMTEE_OBJECT_NULL;
-}
-
-/**
  * @defgroup ObjectNS Namespace
  * @brief Functions to manage @ref qcomtee_object_namespace "Namespace".
  * @{
  */
-
-/**
- * @brief Object namespace.
- *
- * Every time a root object is created, a new namespace is initiated.
- * This guarantees that callback objects exported to QTEE using a root object
- * can only be referenced by QTEE in the namespace maintained by the root
- * object. For QTEE objects, the kernel driver guarantees that objects
- * received using a root object are not visible to others.
- */
-struct qcomtee_object_namespace {
-	int current_idx; /**< Index to start searching for free entry. */
-	struct qcomtee_object *entries[TABLE_SIZE]; /**< Callback object table. */
-	pthread_mutex_t lock; /**< lock to protect members of this struct. */
-};
 
 /**
  * @brief Initialize object ID.
@@ -189,28 +148,6 @@ static void qcomtee_object_ns_del(struct qcomtee_object *object,
 
 /* ''ROOT OBJECT''. */
 
-/**
- * @brief Root object.
- * 
- * Use @ref qcomtee_object_root_init to create a root object and a namespace.
- */
-struct root_object {
-	struct qcomtee_object object;
-	struct qcomtee_object_namespace ns;
-	int fd; /**< Driver's fd. */
-	void (*release)(void *);
-	void *arg; /**< Argument passed to release. */
-};
-
-#define ROOT_OBJECT(ro) container_of((ro), struct root_object, object)
-#define ROOT_OBJECT_NS(ro) (&ROOT_OBJECT(ro)->ns)
-
-/**
- * @def OBJECT_NS
- * @brief Returns the namespace the object belongs to.
- */
-#define OBJECT_NS(o) ROOT_OBJECT_NS((o)->root)
-
 static void qcomtee_object_root_release(struct qcomtee_object *object)
 {
 	struct root_object *root_object = ROOT_OBJECT(object);
@@ -223,8 +160,10 @@ static void qcomtee_object_root_release(struct qcomtee_object *object)
 	free(root_object);
 }
 
-struct qcomtee_object *
-qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg)
+struct qcomtee_object *qcomtee_object_root_init(const char *dev,
+						tee_call_t tee_call,
+						void (*release)(void *),
+						void *arg)
 {
 	struct root_object *root_object;
 	static struct qcomtee_object_ops qcomtee_object_root_ops = {
@@ -240,6 +179,7 @@ qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg)
 	root_object->object.object_id = TEE_OBJREF_NULL;
 	root_object->object.ops = &qcomtee_object_root_ops;
 	root_object->object.root = &root_object->object;
+	root_object->tee_call = tee_call;
 	/* Open the driver. */
 	root_object->fd = open(dev, O_RDWR);
 	if (root_object->fd < 0)
@@ -267,7 +207,7 @@ static void qcomtee_object_tee_release(struct qcomtee_object *object)
 	qcomtee_result_t result;
 
 	if (qcomtee_object_invoke(object, QCOMTEE_OBJREF_OP_RELEASE, NULL, 0,
-				  &result, ioctl) ||
+				  &result) ||
 	    (result != QCOMTEE_OK))
 		MSGE("QTEE object release failed!\n");
 
@@ -705,9 +645,10 @@ union tee_ioctl_arg {
 /* Direct object invocation. */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 			  struct qcomtee_param *params, int num_params,
-			  qcomtee_result_t *result, tee_call_t tee_call)
+			  qcomtee_result_t *result)
 {
 	struct qcomtee_object *root = object->root;
+	struct root_object *root_object = ROOT_OBJECT(root);
 	struct tee_ioctl_buf_data buf_data;
 	struct tee_ioctl_param *tee_params;
 	union tee_ioctl_arg *arg;
@@ -738,7 +679,8 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 	if (qcomtee_object_marshal_in(tee_params, params, num_params, root))
 		return -1;
 
-	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, &buf_data))
+	if (root_object->tee_call(root_object->fd, TEE_IOC_OBJECT_INVOKE,
+				  &buf_data))
 		return -1;
 
 	*result = arg->invoke.ret;
@@ -834,8 +776,9 @@ static int qcomtee_object_dispatch_request(struct qcomtee_object *object,
 	return WITH_RESPONSE;
 }
 
-int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
+int qcomtee_object_process_one(struct qcomtee_object *root)
 {
+	struct root_object *root_object = ROOT_OBJECT(root);
 	struct tee_ioctl_buf_data buf_data;
 	struct tee_ioctl_param *tee_params;
 	struct qcomtee_object *object;
@@ -872,7 +815,8 @@ int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 	tee_params[0].c = 0;
 
 	/* Wait to receive a request ... */
-	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_SUPPL_RECV, &buf_data))
+	if (root_object->tee_call(root_object->fd, TEE_IOC_SUPPL_RECV,
+				  &buf_data))
 		return -1;
 
 	/* ''Process received request''.
@@ -917,7 +861,8 @@ int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 	tee_params[0].b = 0;
 	tee_params[0].c = 0;
 
-	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_SUPPL_SEND, &buf_data))
+	if (root_object->tee_call(root_object->fd, TEE_IOC_SUPPL_SEND,
+				  &buf_data))
 		err = err == WITH_RESPONSE_NO_NOTIFY ? WITH_RESPONSE_NO_NOTIFY :
 						       WITH_RESPONSE_ERR;
 
