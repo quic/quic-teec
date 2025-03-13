@@ -77,9 +77,13 @@ static int qcomtee_object_ns_insert(struct qcomtee_object *object,
 
 	pthread_mutex_lock(&ns->lock);
 	ret = qcomtee_object_id_init(object, ns);
-	if (ret == 0) { /* Enqueue object. */
+	if (ret == 0) {
 		ns->entries[object->object_id] = object;
+		/* Enqueue object. */
 		object->queued = 1;
+	} else if (ret == 1) {
+		/* Already queued. */
+		ret = 0;
 	}
 	pthread_mutex_unlock(&ns->lock);
 
@@ -108,13 +112,14 @@ static int qcomtee_object_ns_insert(struct qcomtee_object *object,
 static struct qcomtee_object *
 qcomtee_object_ns_find(uint64_t id, struct qcomtee_object_namespace *ns)
 {
-	struct qcomtee_object *object = QCOMTEE_OBJECT_NULL;
+	struct qcomtee_object *object;
 
-	if (id < TABLE_SIZE) {
-		object = ns->entries[id];
-		if (object != QCOMTEE_OBJECT_NULL)
-			qcomtee_object_refs_inc(object);
-	}
+	if (id >= TABLE_SIZE)
+		return QCOMTEE_OBJECT_NULL;
+
+	object = ns->entries[id];
+	if (object != QCOMTEE_OBJECT_NULL)
+		qcomtee_object_refs_inc(object);
 
 	return object;
 }
@@ -130,12 +135,16 @@ qcomtee_object_ns_find(uint64_t id, struct qcomtee_object_namespace *ns)
 static void qcomtee_object_ns_del(struct qcomtee_object *object,
 				  struct qcomtee_object_namespace *ns)
 {
+	/* It is not queued using qcomtee_object_ns_insert, so nothing to do. */
+	if (object->queued != 1)
+		return;
+
 	pthread_mutex_lock(&ns->lock);
-	if (object->queued) {
-		ns->entries[object->object_id] = QCOMTEE_OBJECT_NULL;
-		object->queued = 0;
-	}
+	/* Dequeue object. */
+	ns->entries[object->object_id] = QCOMTEE_OBJECT_NULL;
 	pthread_mutex_unlock(&ns->lock);
+
+	object->queued = 0;
 }
 
 /** @} */ // end of ObjectNS
