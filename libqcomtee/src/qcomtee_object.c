@@ -301,7 +301,8 @@ void qcomtee_object_refs_dec(struct qcomtee_object *object)
 			qcomtee_object_tee_release(object);
 
 			break;
-		case QCOMTEE_OBJECT_TYPE_CB: {
+		case QCOMTEE_OBJECT_TYPE_CB:
+		case QCOMTEE_OBJECT_TYPE_MEMORY: {
 			struct qcomtee_object *root = object->root;
 
 			/* It dequeues the object if it is already queued. */
@@ -333,13 +334,14 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 {
 	/* It assumes param is object. */
 	struct qcomtee_object *object = param->object;
+	qcomtee_object_type_t object_type = qcomtee_object_typeof(object);
 
 	/* It expects caller to set tee_param attribute. */
 	if (tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT &&
 	    tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT)
 		return -1;
 
-	switch (qcomtee_object_typeof(object)) {
+	switch (object_type) {
 	case QCOMTEE_OBJECT_TYPE_NULL:
 		tee_param->a = TEE_OBJREF_NULL;
 		tee_param->b = 0;
@@ -351,6 +353,7 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 
 		break;
 	case QCOMTEE_OBJECT_TYPE_CB:
+	case QCOMTEE_OBJECT_TYPE_MEMORY:
 		/* Only accept object that belong to the same namespace. */
 		if (object->root != root)
 			return -1;
@@ -364,7 +367,11 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 			object->tee_object_id = object->object_id;
 
 		tee_param->a = object->tee_object_id;
-		tee_param->b = QCOMTEE_OBJREF_USER;
+
+		if (object_type == QCOMTEE_OBJECT_TYPE_CB)
+			tee_param->b = QCOMTEE_OBJREF_USER;
+		else /* QCOMTEE_OBJECT_TYPE_MEMORY. */
+			tee_param->b = QCOMTEE_OBJREF_MEM;
 
 		break;
 	default:
@@ -403,7 +410,11 @@ qcomtee_object_param_from_tee_param(struct qcomtee_param *param,
 		object = qcomtee_object_ns_find(tee_param->a,
 						QCOMTEE_OBJECT_TYPE_CB,
 						ROOT_OBJECT_NS(root));
-	} else {
+	} else if (tee_param->b == QCOMTEE_OBJECT_TYPE_MEMORY) {
+		object = qcomtee_object_ns_find(tee_param->a,
+						QCOMTEE_OBJECT_TYPE_MEMORY,
+						ROOT_OBJECT_NS(root));
+	} else { /* QCOMTEE_OBJREF_TEE. */
 		object = qcomtee_object_tee_init(root, tee_param->a);
 	}
 

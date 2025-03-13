@@ -22,6 +22,7 @@ include_directories(${QCBOR_INCLUDE_DIRS})
 set(SRC
         src/qcomtee_object.c
         src/objects/credentials_obj.c
+	src/objects/mem_obj.c
 )
 
 add_library(qcomtee ${SRC})
