@@ -142,6 +142,7 @@ typedef enum {
 	QCOMTEE_OBJECT_TYPE_TEE, /**< It is an object hosted in QTEE. */
 	QCOMTEE_OBJECT_TYPE_ROOT, /**< It is a root object. */
 	QCOMTEE_OBJECT_TYPE_CB, /**< It is a callback object. */
+	QCOMTEE_OBJECT_TYPE_MEMORY, /**< It is a memory object. */
 } qcomtee_object_type_t;
 
 /**
