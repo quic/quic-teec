@@ -335,7 +335,7 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 		break;
 	case QCOMTEE_OBJECT_TYPE_TEE:
 		tee_param->a = object->object_id;
-		tee_param->b = 0;
+		tee_param->b = QCOMTEE_OBJREF_TEE;
 
 		break;
 	case QCOMTEE_OBJECT_TYPE_CB:
