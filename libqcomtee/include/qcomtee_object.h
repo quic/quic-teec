@@ -24,10 +24,22 @@ typedef uint32_t qcomtee_op_t;
  */
 
 /**
+  * @def QCOMTEE_OBJREF_TEE
+  * @brief It indicates that the object is hosted in QTEE.
+  */
+#define QCOMTEE_OBJREF_TEE (1 << 0)
+
+/**
  * @def QCOMTEE_OBJREF_USER
  * @brief It indicates that the object is hosted in userspace.
  */
-#define QCOMTEE_OBJREF_USER (1 << 0)
+#define QCOMTEE_OBJREF_USER (1 << 1)
+
+/**
+ * @def QCOMTEE_OBJREF_MEM
+ * @brief It indicates that the object is a memory object.
+ */
+#define QCOMTEE_OBJREF_MEM (1 << 2)
 
 /** @} */ // end of ObjRefFlags
 
