@@ -8,13 +8,13 @@
 
 /**
  * @brief Get a credentials object.
- * @param root_object The root object to which this object belongs.
+ * @param root The root object to which this object belongs.
  * @param object Credentials object.
  * @return On success returns @ref QCOMTEE_OK;
  *         Otherwise @ref QCOMTEE_ERROR_MEM.
  */
 qcomtee_result_t
-qcomtee_object_credentials_init(struct qcomtee_object *root_object,
+qcomtee_object_credentials_init(struct qcomtee_object *root,
 				struct qcomtee_object **object);
 
 #endif // _QCOMTEE_OBJECT_TYPES_H
