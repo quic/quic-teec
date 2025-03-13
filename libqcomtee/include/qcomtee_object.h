@@ -256,9 +256,16 @@ static inline void qcomtee_object_refs_inc(struct qcomtee_object *object)
  */
 void qcomtee_object_refs_dec(struct qcomtee_object *object);
 
+#ifdef __GLIBC__
+typedef int (*tee_call_t)(int, unsigned long, ...);
+#else
+typedef int (*tee_call_t)(int, int, ...);
+#endif
+
 /**
  * @brief Create a root object.
  * @param dev TEE device file pathname.
+ * @param tee_call API to call to TEE driver (e.g. ioctl()).
  * @param release Called on destruction of this root object.
  * @param arg Argument passed to release.
  *
@@ -268,8 +275,10 @@ void qcomtee_object_refs_dec(struct qcomtee_object *object);
  * @return On success, returns the object;
  *         Otherwise, returns @ref QCOMTEE_OBJECT_NULL.
  */
-struct qcomtee_object *
-qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg);
+struct qcomtee_object *qcomtee_object_root_init(const char *dev,
+						tee_call_t tee_call,
+						void (*release)(void *),
+						void *arg);
 
 /**
  * @brief Initialize a callback objet.
@@ -282,12 +291,6 @@ int qcomtee_object_cb_init(struct qcomtee_object *object,
 			   struct qcomtee_object_ops *ops,
 			   struct qcomtee_object *root);
 
-#ifdef __GLIBC__
-typedef int (*tee_call_t)(int, unsigned long, ...);
-#else
-typedef int (*tee_call_t)(int, int, ...);
-#endif
-
 /**
  * @brief Invoke an Object.
  *
@@ -299,12 +302,11 @@ typedef int (*tee_call_t)(int, int, ...);
  * @param params Input parameter array to the requested operation.
  * @param num_params Number of parameter in the input array.
  * @param result Result of operation.
- * @param tee_call Submit request to kernel driver.
  * @return On success, 0; Otherwise, returns -1.
  */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 			  struct qcomtee_param *params, int num_params,
-			  qcomtee_result_t *result, tee_call_t tee_call);
+			  qcomtee_result_t *result);
 
 /**
  * @brief Process single request.
@@ -317,15 +319,13 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
  * operation. Therefore, if it is being executed by a pthread, it is not
  * safe to use PTHREAD_CANCEL_ASYNCHRONOUS.
  *
- * The tee_call function should implement support for reading a new request
- * (i.e., TEE_IOC_SUPPL_RECV) and submitting the response
+ * The @ref qcomtee_object::tee_call function should implement support for
+ * reading a new request (i.e., TEE_IOC_SUPPL_RECV) and submitting the response
  * (i.e., TEE_IOC_SUPPL_SEND).
  * 
  * @param root The root object for which the request queue is checked.
- * @param tee_call Read a request and submit response to kernel driver.
  * @return On success, 0; Otherwise, returns -1.
  */
-int qcomtee_object_process_one(struct qcomtee_object *root,
-			       tee_call_t tee_call);
+int qcomtee_object_process_one(struct qcomtee_object *root);
 
 #endif // _QCOMTEE_OBJECT_H
