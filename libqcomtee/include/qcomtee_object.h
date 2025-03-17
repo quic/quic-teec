@@ -56,7 +56,7 @@ typedef uint32_t qcomtee_op_t;
  * @brief Release object.
  * 
  */
-#define QCOMTEE_OBJREF_OP_RELEASE ((qcomtee_op_t)(65536))
+#define QCOMTEE_OBJREF_OP_RELEASE ((qcomtee_op_t)(65535))
 
 /** @} */ // end of ObjRefOperations
 
