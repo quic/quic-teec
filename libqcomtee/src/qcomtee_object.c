@@ -205,8 +205,11 @@ struct qcomtee_object *qcomtee_object_root_init(const char *dev,
 	root_object->tee_call = tee_call;
 	/* Open the driver. */
 	root_object->fd = open(dev, O_RDWR);
-	if (root_object->fd < 0)
+	if (root_object->fd < 0) {
+		MSGE("%s: %s\n", __func__, strerror(errno));
+
 		goto failed_out;
+	}
 
 	/* INIT the namespace. */
 	root_object->ns.current_idx = 0;
@@ -232,7 +235,7 @@ static void qcomtee_object_tee_release(struct qcomtee_object *object)
 	if (qcomtee_object_invoke(object, QCOMTEE_OBJREF_OP_RELEASE, NULL, 0,
 				  &result) ||
 	    (result != QCOMTEE_OK))
-		MSGE("QTEE object release failed!\n");
+		MSGE("%s: QCOMTEE_OBJREF_OP_RELEASE failed.\n", __func__);
 
 	free(object);
 	/* qcomtee_object_refs_inc has been called in qcomtee_object_tee_init. */
