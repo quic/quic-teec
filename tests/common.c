@@ -29,7 +29,7 @@ static int tee_call(int fd, int op, ...)
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	ret = ioctl(fd, op, arg);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-	if (ret)
+	if (ret < 0)
 		PRINT("ioctl: %s\n", strerror(errno));
 
 	return ret;
@@ -150,13 +150,14 @@ test_get_service_object(struct qcomtee_object *client_env_object, uint32_t uid)
 
 /* File stuff. */
 
+/* On error returns "0"; otherwise file size (which could be "0"). */
 size_t test_get_file_size(FILE *file)
 {
 	ssize_t size;
 
 	if (fseek(file, 0, SEEK_END)) {
 		PRINT("%s\n", strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	size = ftell(file);
@@ -167,15 +168,46 @@ size_t test_get_file_size(FILE *file)
 
 	if (fseek(file, 0, SEEK_SET)) {
 		PRINT("%s\n", strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	return size;
 }
 
-int test_read_file(const char *filename, char **buffer, size_t *size)
+/* On error returns "0"; otherwise file size (which could be "0"). */
+size_t test_get_file_size_by_filename(const char *pathname, const char *name)
 {
-	int ret = -1;
+	FILE *file;
+	size_t file_size;
+
+	char filename[1024] = { 0 };
+	/* Hope it fits! */
+	snprintf(filename, sizeof(filename), "%s/%s", pathname, name);
+
+	file = fopen(filename, "r");
+	if (!file) {
+		PRINT("%s\n", strerror(errno));
+		return 0;
+	}
+
+	file_size = test_get_file_size(file);
+	fclose(file);
+
+	return file_size;
+}
+
+/**
+ * @brief Read a file.
+ *
+ * If buffer is NULL, it allocated the buffer. Caller should free the buffer.
+ *
+ * @param filename Path to the file.
+ * @param buffer Buffer to read the file.
+ * @param size Size of the buffer.
+ * @return On success, returns size of the file; Otherwise, returns 0. 
+ */
+size_t test_read_file(const char *filename, char **buffer, size_t size)
+{
 	FILE *file;
 	char *file_buf;
 	size_t file_size;
@@ -183,39 +215,53 @@ int test_read_file(const char *filename, char **buffer, size_t *size)
 	file = fopen(filename, "r");
 	if (!file) {
 		PRINT("%s\n", strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	file_size = test_get_file_size(file);
 	if (!file_size)
 		goto out;
 
-	file_buf = malloc(file_size);
-	if (!file_buf) {
-		PRINT("malloc,\n");
-		goto out;
+	if (size > 0) {
+		/* User provided the buffer; make sure it is large enough. */
+		if (size < file_size) {
+			PRINT("no space.\n");
+			file_size = 0; /* Unable to read. */
+
+			goto out;
+		}
+
+		file_buf = *buffer;
+	} else {
+		/* User did not provide the buffer; allocate one. */
+		file_buf = malloc(file_size);
+		if (!file_buf) {
+			PRINT("malloc.\n");
+			file_size = 0; /* Unable to read. */
+
+			goto out;
+		}
 	}
 
 	PRINT("File %s, size: %lu Bytes.\n", filename, file_size);
 
 	if (fread(file_buf, 1, file_size, file) != file_size) {
 		PRINT("fread.\n");
-		free(file_buf);
+		if (size == 0)
+			free(file_buf);
+		file_size = 0; /* Unable to read. */
 		goto out;
 	}
 
 	*buffer = file_buf;
-	*size = file_size;
-
-	ret = 0;
 out:
 	fclose(file);
 
-	return ret;
+	return file_size;
 }
 
-int test_read_file2(const char *pathname, const char *name, char **buffer,
-		    size_t *size)
+size_t test_read_file2(const char *pathname, const char *name, char **buffer,
+		       size_t size)
 {
 	char filename[1024] = { 0 };
 	/* Hope it fits! */
