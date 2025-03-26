@@ -14,9 +14,9 @@ struct supplicant {
 
 /* op is TEE_IOC_SUPPL_RECV or TEE_IOC_SUPPL_SEND. */
 #ifdef __GLIBC__
-int tee_call(int fd, unsigned long op, ...)
+static int tee_call(int fd, unsigned long op, ...)
 #else
-int tee_call(int fd, int op, ...)
+static int tee_call(int fd, int op, ...)
 #endif
 {
 	va_list ap;
@@ -29,7 +29,7 @@ int tee_call(int fd, int op, ...)
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	ret = ioctl(fd, op, arg);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-	if (ret)
+	if (ret < 0)
 		PRINT("ioctl: %s\n", strerror(errno));
 
 	return ret;
@@ -42,7 +42,7 @@ static void *test_supplicant_worker(void *arg)
 
 	while (1) {
 		pthread_testcancel();
-		if (qcomtee_object_process_one(sup->root, tee_call))
+		if (qcomtee_object_process_one(sup->root))
 			break;
 	}
 
@@ -81,7 +81,8 @@ struct qcomtee_object *test_get_root(void)
 		return QCOMTEE_OBJECT_NULL;
 
 	/* Start a fresh namespace. */
-	root = qcomtee_object_root_init(DEV_TEE, test_supplicant_release, sup);
+	root = qcomtee_object_root_init(DEV_TEE, tee_call,
+					test_supplicant_release, sup);
 	if (root == QCOMTEE_OBJECT_NULL)
 		goto failed_out;
 
@@ -116,12 +117,12 @@ struct qcomtee_object *test_get_client_env_object(struct qcomtee_object *root)
 	params[0].object = creds_object;
 	params[1].attr = QCOMTEE_OBJREF_OUTPUT;
 	/* 2 is IClientEnv_OP_registerAsClient. */
-	if (test_object_invoke(root, 2, params, 2, &result)) {
+	if (qcomtee_object_invoke(root, 2, params, 2, &result)) {
 		qcomtee_object_refs_dec(creds_object);
 		return QCOMTEE_OBJECT_NULL;
 	}
 
-	/* test_object_invoke was successful; QTEE releases creds_object. */
+	/* qcomtee_object_invoke was successful; QTEE releases creds_object. */
 
 	if (!result)
 		return params[1].object;
@@ -140,7 +141,7 @@ test_get_service_object(struct qcomtee_object *client_env_object, uint32_t uid)
 	params[0].ubuf = UBUF_INIT(&uid);
 	params[1].attr = QCOMTEE_OBJREF_OUTPUT;
 	/* 0 is IClientEnv_OP_open. */
-	if (test_object_invoke(client_env_object, 0, params, 2, &result) ||
+	if (qcomtee_object_invoke(client_env_object, 0, params, 2, &result) ||
 	    (result != QCOMTEE_OK))
 		return QCOMTEE_OBJECT_NULL;
 
@@ -149,13 +150,14 @@ test_get_service_object(struct qcomtee_object *client_env_object, uint32_t uid)
 
 /* File stuff. */
 
+/* On error returns "0"; otherwise file size (which could be "0"). */
 size_t test_get_file_size(FILE *file)
 {
 	ssize_t size;
 
 	if (fseek(file, 0, SEEK_END)) {
 		PRINT("%s\n", strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	size = ftell(file);
@@ -166,15 +168,46 @@ size_t test_get_file_size(FILE *file)
 
 	if (fseek(file, 0, SEEK_SET)) {
 		PRINT("%s\n", strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	return size;
 }
 
-int test_read_file(const char *filename, char **buffer, size_t *size)
+/* On error returns "0"; otherwise file size (which could be "0"). */
+size_t test_get_file_size_by_filename(const char *pathname, const char *name)
 {
-	int ret = -1;
+	FILE *file;
+	size_t file_size;
+
+	char filename[1024] = { 0 };
+	/* Hope it fits! */
+	snprintf(filename, sizeof(filename), "%s/%s", pathname, name);
+
+	file = fopen(filename, "r");
+	if (!file) {
+		PRINT("%s\n", strerror(errno));
+		return 0;
+	}
+
+	file_size = test_get_file_size(file);
+	fclose(file);
+
+	return file_size;
+}
+
+/**
+ * @brief Read a file.
+ *
+ * If buffer is NULL, it allocated the buffer. Caller should free the buffer.
+ *
+ * @param filename Path to the file.
+ * @param buffer Buffer to read the file.
+ * @param size Size of the buffer.
+ * @return On success, returns size of the file; Otherwise, returns 0. 
+ */
+size_t test_read_file(const char *filename, char **buffer, size_t size)
+{
 	FILE *file;
 	char *file_buf;
 	size_t file_size;
@@ -182,39 +215,53 @@ int test_read_file(const char *filename, char **buffer, size_t *size)
 	file = fopen(filename, "r");
 	if (!file) {
 		PRINT("%s\n", strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	file_size = test_get_file_size(file);
 	if (!file_size)
 		goto out;
 
-	file_buf = malloc(file_size);
-	if (!file_buf) {
-		PRINT("malloc,\n");
-		goto out;
+	if (size > 0) {
+		/* User provided the buffer; make sure it is large enough. */
+		if (size < file_size) {
+			PRINT("no space.\n");
+			file_size = 0; /* Unable to read. */
+
+			goto out;
+		}
+
+		file_buf = *buffer;
+	} else {
+		/* User did not provide the buffer; allocate one. */
+		file_buf = malloc(file_size);
+		if (!file_buf) {
+			PRINT("malloc.\n");
+			file_size = 0; /* Unable to read. */
+
+			goto out;
+		}
 	}
 
 	PRINT("File %s, size: %lu Bytes.\n", filename, file_size);
 
 	if (fread(file_buf, 1, file_size, file) != file_size) {
 		PRINT("fread.\n");
-		free(file_buf);
+		if (size == 0)
+			free(file_buf);
+		file_size = 0; /* Unable to read. */
 		goto out;
 	}
 
 	*buffer = file_buf;
-	*size = file_size;
-
-	ret = 0;
 out:
 	fclose(file);
 
-	return ret;
+	return file_size;
 }
 
-int test_read_file2(const char *pathname, const char *name, char **buffer,
-		    size_t *size)
+size_t test_read_file2(const char *pathname, const char *name, char **buffer,
+		       size_t size)
 {
 	char filename[1024] = { 0 };
 	/* Hope it fits! */

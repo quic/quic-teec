@@ -12,14 +12,6 @@
 /* Driver's file.*/
 #define DEV_TEE "/dev/tee0"
 
-#ifdef __GLIBC__
-int tee_call(int fd, unsigned long op, ...);
-#else
-int tee_call(int fd, int op, ...);
-#endif
-
-#define test_object_invoke(...) qcomtee_object_invoke(__VA_ARGS__, tee_call)
-
 /**
  * @brief Get a root object.
  * @return On success, returns the object;
@@ -48,9 +40,10 @@ test_get_service_object(struct qcomtee_object *client_env_object, uint32_t uid);
 
 /* File stuff. */
 size_t test_get_file_size(FILE *file);
-int test_read_file(const char *filename, char **buffer, size_t *size);
-int test_read_file2(const char *pathname, const char *name, char **buffer,
-		    size_t *size);
+size_t test_read_file(const char *filename, char **buffer, size_t size);
+size_t test_get_file_size_by_filename(const char *pathname, const char *name);
+size_t test_read_file2(const char *pathname, const char *name, char **buffer,
+		       size_t size);
 
 #define PRINT(fmt, ...) \
 	printf("[%s][%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
@@ -64,6 +57,6 @@ void test_print_diagnostics_info(void);
 /* ta_load.c. */
 #define TEST_TA "smcinvoke_skeleton_ta64.mbn"
 
-void test_load_sample_ta(const char *pathname, int cmd);
+void test_load_sample_ta(const char *pathname, int use_mo, int cmd);
 
 #endif // _TESTS_PRIVATE_H

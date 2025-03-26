@@ -10,7 +10,7 @@ static void usage(char *name)
 	printf("OPTION are:\n"
 	       "\t-d - Run the TZ diagnostics test that prints basic info on TZ heaps.\n"
 	       "\t-l - Load the test TA and send command.\n"
-	       "\t\t%s -l <path to TA binary> <command>\n"
+	       "\t\t%s -l <path to TA binary> <buffer vs. memory object> <command>\n"
 	       "\t-h - Print this help message and exit\n\n",
 	       name);
 }
@@ -22,10 +22,10 @@ int main(int argc, char *argv[])
 		test_print_diagnostics_info();
 		break;
 	case 'l':
-		if (argc != 4)
+		if (argc != 5)
 			goto help;
 
-		test_load_sample_ta(argv[2], atoi(argv[3]));
+		test_load_sample_ta(argv[2], atoi(argv[3]), atoi(argv[4]));
 		break;
 help:
 	case 'h':

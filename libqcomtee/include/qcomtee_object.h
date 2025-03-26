@@ -24,10 +24,22 @@ typedef uint32_t qcomtee_op_t;
  */
 
 /**
+  * @def QCOMTEE_OBJREF_TEE
+  * @brief It indicates that the object is hosted in QTEE.
+  */
+#define QCOMTEE_OBJREF_TEE (1 << 0)
+
+/**
  * @def QCOMTEE_OBJREF_USER
  * @brief It indicates that the object is hosted in userspace.
  */
-#define QCOMTEE_OBJREF_USER (1 << 0)
+#define QCOMTEE_OBJREF_USER (1 << 1)
+
+/**
+ * @def QCOMTEE_OBJREF_MEM
+ * @brief It indicates that the object is a memory object.
+ */
+#define QCOMTEE_OBJREF_MEM (1 << 2)
 
 /** @} */ // end of ObjRefFlags
 
@@ -44,7 +56,7 @@ typedef uint32_t qcomtee_op_t;
  * @brief Release object.
  * 
  */
-#define QCOMTEE_OBJREF_OP_RELEASE ((qcomtee_op_t)(65536))
+#define QCOMTEE_OBJREF_OP_RELEASE ((qcomtee_op_t)(65535))
 
 /** @} */ // end of ObjRefOperations
 
@@ -130,6 +142,7 @@ typedef enum {
 	QCOMTEE_OBJECT_TYPE_TEE, /**< It is an object hosted in QTEE. */
 	QCOMTEE_OBJECT_TYPE_ROOT, /**< It is a root object. */
 	QCOMTEE_OBJECT_TYPE_CB, /**< It is a callback object. */
+	QCOMTEE_OBJECT_TYPE_MEMORY, /**< It is a memory object. */
 } qcomtee_object_type_t;
 
 /**
@@ -195,6 +208,7 @@ struct qcomtee_object_ops {
 struct qcomtee_object {
 	atomic_int refs; /**< Number of references to this object. */
 	uint64_t object_id; /**< ID assigned to this object. */
+	uint64_t tee_object_id; /**< ID assigned to this object for QTEE. */
 	qcomtee_object_type_t object_type; /**< Object Type. */
 
 	/**
@@ -244,10 +258,23 @@ qcomtee_object_typeof(struct qcomtee_object *object)
 /**
  * @brief Increase object reference count.
  * @param object The object being incremented.
+ * @return On success, returns 0;
+ *         Otherwise, returns -1.
  */
-static inline void qcomtee_object_refs_inc(struct qcomtee_object *object)
+static inline int qcomtee_object_refs_inc(struct qcomtee_object *object)
 {
-	atomic_fetch_add(&object->refs, 1);
+	int old;
+
+	if (object == QCOMTEE_OBJECT_NULL)
+		return -1;
+
+	old = atomic_load(&object->refs);
+	do {
+		if (old == 0)
+			return -1;
+	} while (!atomic_compare_exchange_weak(&object->refs, &old, old + 1));
+
+	return 0;
 }
 
 /**
@@ -256,9 +283,16 @@ static inline void qcomtee_object_refs_inc(struct qcomtee_object *object)
  */
 void qcomtee_object_refs_dec(struct qcomtee_object *object);
 
+#ifdef __GLIBC__
+typedef int (*tee_call_t)(int, unsigned long, ...);
+#else
+typedef int (*tee_call_t)(int, int, ...);
+#endif
+
 /**
  * @brief Create a root object.
  * @param dev TEE device file pathname.
+ * @param tee_call API to call to TEE driver (e.g. ioctl()).
  * @param release Called on destruction of this root object.
  * @param arg Argument passed to release.
  *
@@ -268,8 +302,10 @@ void qcomtee_object_refs_dec(struct qcomtee_object *object);
  * @return On success, returns the object;
  *         Otherwise, returns @ref QCOMTEE_OBJECT_NULL.
  */
-struct qcomtee_object *
-qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg);
+struct qcomtee_object *qcomtee_object_root_init(const char *dev,
+						tee_call_t tee_call,
+						void (*release)(void *),
+						void *arg);
 
 /**
  * @brief Initialize a callback objet.
@@ -282,12 +318,6 @@ int qcomtee_object_cb_init(struct qcomtee_object *object,
 			   struct qcomtee_object_ops *ops,
 			   struct qcomtee_object *root);
 
-#ifdef __GLIBC__
-typedef int (*tee_call_t)(int, unsigned long, ...);
-#else
-typedef int (*tee_call_t)(int, int, ...);
-#endif
-
 /**
  * @brief Invoke an Object.
  *
@@ -299,12 +329,11 @@ typedef int (*tee_call_t)(int, int, ...);
  * @param params Input parameter array to the requested operation.
  * @param num_params Number of parameter in the input array.
  * @param result Result of operation.
- * @param tee_call Submit request to kernel driver.
  * @return On success, 0; Otherwise, returns -1.
  */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 			  struct qcomtee_param *params, int num_params,
-			  qcomtee_result_t *result, tee_call_t tee_call);
+			  qcomtee_result_t *result);
 
 /**
  * @brief Process single request.
@@ -317,15 +346,13 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
  * operation. Therefore, if it is being executed by a pthread, it is not
  * safe to use PTHREAD_CANCEL_ASYNCHRONOUS.
  *
- * The tee_call function should implement support for reading a new request
- * (i.e., TEE_IOC_SUPPL_RECV) and submitting the response
+ * The @ref qcomtee_object::tee_call function should implement support for
+ * reading a new request (i.e., TEE_IOC_SUPPL_RECV) and submitting the response
  * (i.e., TEE_IOC_SUPPL_SEND).
  * 
  * @param root The root object for which the request queue is checked.
- * @param tee_call Read a request and submit response to kernel driver.
  * @return On success, 0; Otherwise, returns -1.
  */
-int qcomtee_object_process_one(struct qcomtee_object *root,
-			       tee_call_t tee_call);
+int qcomtee_object_process_one(struct qcomtee_object *root);
 
 #endif // _QCOMTEE_OBJECT_H

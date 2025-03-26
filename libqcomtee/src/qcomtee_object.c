@@ -1,22 +1,11 @@
 // Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include <stdarg.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-
 #include <linux/tee.h>
-#include <qcomtee_object.h>
-
-/**
- * @def TABLE_SIZE
- * @brief The number of objects that can be exported to QTEE in each root object.
- */
-#define TABLE_SIZE 1024
+#include <qcomtee_object_private.h>
 
 /**
  * @def DISP_BUFFER
@@ -27,46 +16,18 @@
 #define DISP_BUFFER 1024
 
 /**
- * @brief Initialize an object.
- * @param object Object to initialize.
- * @param object_type Type of the object.
- */
-static inline void QCOMTEE_OBJECT_INIT(struct qcomtee_object *object,
-				       qcomtee_object_type_t object_type)
-{
-	memset(object, 0, sizeof(*object));
-
-	atomic_init(&object->refs, 1);
-	object->object_type = object_type;
-	object->root = QCOMTEE_OBJECT_NULL;
-}
-
-/**
  * @defgroup ObjectNS Namespace
  * @brief Functions to manage @ref qcomtee_object_namespace "Namespace".
  * @{
  */
 
 /**
- * @brief Object namespace.
- *
- * Every time a root object is created, a new namespace is initiated.
- * This guarantees that callback objects exported to QTEE using a root object
- * can only be referenced by QTEE in the namespace maintained by the root
- * object. For QTEE objects, the kernel driver guarantees that objects
- * received using a root object are not visible to others.
- */
-struct qcomtee_object_namespace {
-	int current_idx; /**< Index to start searching for free entry. */
-	struct qcomtee_object *entries[TABLE_SIZE]; /**< Callback object table. */
-	pthread_mutex_t lock; /**< lock to protect members of this struct. */
-};
-
-/**
  * @brief Initialize object ID.
  *
  * This allocates an ID for the object if and only if it does not
  * already have one. The caller should hold the lock.
+ * The ID is allocated in a round-robin fashion, between 1 (inclusive) and
+ * TABLE_SIZE (exclusive).
  *
  * @param object Object to allocate an ID. 
  * @param ns The namespace to which this object belongs.
@@ -85,6 +46,10 @@ static int qcomtee_object_id_init(struct qcomtee_object *object,
 	/* Simple id allocator. */
 	for (i = 0; i < TABLE_SIZE; i++) {
 		idx = (ns->current_idx + i) % TABLE_SIZE;
+		/* Skip "0". */
+		if (idx == 0)
+			continue;
+
 		if (ns->entries[idx] == QCOMTEE_OBJECT_NULL) {
 			object->object_id = idx;
 			ns->current_idx = (idx + 1) % TABLE_SIZE;
@@ -118,9 +83,13 @@ static int qcomtee_object_ns_insert(struct qcomtee_object *object,
 
 	pthread_mutex_lock(&ns->lock);
 	ret = qcomtee_object_id_init(object, ns);
-	if (ret == 0) { /* Enqueue object. */
+	if (ret == 0) {
 		ns->entries[object->object_id] = object;
+		/* Enqueue object. */
 		object->queued = 1;
+	} else if (ret == 1) {
+		/* Already queued. */
+		ret = 0;
 	}
 	pthread_mutex_unlock(&ns->lock);
 
@@ -136,26 +105,35 @@ static int qcomtee_object_ns_insert(struct qcomtee_object *object,
  * This is called as part of marshaling out when returning from QTEE; or
  * as part of marshaling in when QTEE is making a callback request.
  * So, it is always called on behalf of QTEE.
- *
- * This is not serialized with @ref qcomtee_object_ns_insert or
- * @ref qcomtee_object_ns_del, as QTEE only uses IDs that it assumes it owns
- * and would not release it while using it.
  * 
- * @param id Object ID to search for in the namespace.
+ * @param id QTEE object ID to search for in the namespace.
+ * @param object_type Object type to search for.
  * @param ns Namespace to search for the object ID.
  * @return On success, returns the object;
  *         Otherwise, returns @ref QCOMTEE_OBJECT_NULL.
  */
 static struct qcomtee_object *
-qcomtee_object_ns_find(uint64_t id, struct qcomtee_object_namespace *ns)
+qcomtee_object_ns_find(uint64_t id, qcomtee_object_type_t object_type,
+		       struct qcomtee_object_namespace *ns)
 {
 	struct qcomtee_object *object = QCOMTEE_OBJECT_NULL;
+	int i;
 
-	if (id < TABLE_SIZE) {
-		object = ns->entries[id];
-		if (object != QCOMTEE_OBJECT_NULL)
-			qcomtee_object_refs_inc(object);
+	pthread_mutex_lock(&ns->lock);
+	for (i = 0; i < TABLE_SIZE; i++) {
+		if (ns->entries[i] != QCOMTEE_OBJECT_NULL &&
+		    ns->entries[i]->tee_object_id == id &&
+		    ns->entries[i]->object_type == object_type) {
+			object = ns->entries[i];
+
+			/* Is object still valid?! */
+			if (qcomtee_object_refs_inc(object))
+				object = QCOMTEE_OBJECT_NULL;
+
+			break;
+		}
 	}
+	pthread_mutex_unlock(&ns->lock);
 
 	return object;
 }
@@ -171,12 +149,16 @@ qcomtee_object_ns_find(uint64_t id, struct qcomtee_object_namespace *ns)
 static void qcomtee_object_ns_del(struct qcomtee_object *object,
 				  struct qcomtee_object_namespace *ns)
 {
+	/* It is not queued using qcomtee_object_ns_insert, so nothing to do. */
+	if (object->queued != 1)
+		return;
+
 	pthread_mutex_lock(&ns->lock);
-	if (object->queued) {
-		ns->entries[object->object_id] = QCOMTEE_OBJECT_NULL;
-		object->queued = 0;
-	}
+	/* Dequeue object. */
+	ns->entries[object->object_id] = QCOMTEE_OBJECT_NULL;
 	pthread_mutex_unlock(&ns->lock);
+
+	object->queued = 0;
 }
 
 /** @} */ // end of ObjectNS
@@ -188,28 +170,6 @@ static void qcomtee_object_ns_del(struct qcomtee_object *object,
  */
 
 /* ''ROOT OBJECT''. */
-
-/**
- * @brief Root object.
- * 
- * Use @ref qcomtee_object_root_init to create a root object and a namespace.
- */
-struct root_object {
-	struct qcomtee_object object;
-	struct qcomtee_object_namespace ns;
-	int fd; /**< Driver's fd. */
-	void (*release)(void *);
-	void *arg; /**< Argument passed to release. */
-};
-
-#define ROOT_OBJECT(ro) container_of((ro), struct root_object, object)
-#define ROOT_OBJECT_NS(ro) (&ROOT_OBJECT(ro)->ns)
-
-/**
- * @def OBJECT_NS
- * @brief Returns the namespace the object belongs to.
- */
-#define OBJECT_NS(o) ROOT_OBJECT_NS((o)->root)
 
 static void qcomtee_object_root_release(struct qcomtee_object *object)
 {
@@ -223,8 +183,10 @@ static void qcomtee_object_root_release(struct qcomtee_object *object)
 	free(root_object);
 }
 
-struct qcomtee_object *
-qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg)
+struct qcomtee_object *qcomtee_object_root_init(const char *dev,
+						tee_call_t tee_call,
+						void (*release)(void *),
+						void *arg)
 {
 	struct root_object *root_object;
 	static struct qcomtee_object_ops qcomtee_object_root_ops = {
@@ -237,13 +199,17 @@ qcomtee_object_root_init(const char *dev, void (*release)(void *), void *arg)
 
 	/* INIT the root object. */
 	QCOMTEE_OBJECT_INIT(&root_object->object, QCOMTEE_OBJECT_TYPE_ROOT);
-	root_object->object.object_id = TEE_OBJREF_NULL;
+	root_object->object.tee_object_id = TEE_OBJREF_NULL;
 	root_object->object.ops = &qcomtee_object_root_ops;
 	root_object->object.root = &root_object->object;
+	root_object->tee_call = tee_call;
 	/* Open the driver. */
 	root_object->fd = open(dev, O_RDWR);
-	if (root_object->fd < 0)
+	if (root_object->fd < 0) {
+		MSGE("%s: %s\n", __func__, strerror(errno));
+
 		goto failed_out;
+	}
 
 	/* INIT the namespace. */
 	root_object->ns.current_idx = 0;
@@ -267,9 +233,9 @@ static void qcomtee_object_tee_release(struct qcomtee_object *object)
 	qcomtee_result_t result;
 
 	if (qcomtee_object_invoke(object, QCOMTEE_OBJREF_OP_RELEASE, NULL, 0,
-				  &result, ioctl) ||
+				  &result) ||
 	    (result != QCOMTEE_OK))
-		MSGE("QTEE object release failed!\n");
+		MSGE("%s: QCOMTEE_OBJREF_OP_RELEASE failed.\n", __func__);
 
 	free(object);
 	/* qcomtee_object_refs_inc has been called in qcomtee_object_tee_init. */
@@ -298,7 +264,7 @@ qcomtee_object_tee_init(struct qcomtee_object *root, uint64_t id)
 		return QCOMTEE_OBJECT_NULL;
 
 	QCOMTEE_OBJECT_INIT(object, QCOMTEE_OBJECT_TYPE_TEE);
-	object->object_id = id;
+	object->tee_object_id = id;
 	/* Keep a copy of root object; released in qcomtee_object_tee_release. */
 	qcomtee_object_refs_inc(root);
 	object->root = root;
@@ -340,7 +306,8 @@ void qcomtee_object_refs_dec(struct qcomtee_object *object)
 			qcomtee_object_tee_release(object);
 
 			break;
-		case QCOMTEE_OBJECT_TYPE_CB: {
+		case QCOMTEE_OBJECT_TYPE_CB:
+		case QCOMTEE_OBJECT_TYPE_MEMORY: {
 			struct qcomtee_object *root = object->root;
 
 			/* It dequeues the object if it is already queued. */
@@ -372,24 +339,26 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 {
 	/* It assumes param is object. */
 	struct qcomtee_object *object = param->object;
+	qcomtee_object_type_t object_type = qcomtee_object_typeof(object);
 
 	/* It expects caller to set tee_param attribute. */
 	if (tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_INPUT &&
 	    tee_param->attr != TEE_IOCTL_PARAM_ATTR_TYPE_OBJREF_OUTPUT)
 		return -1;
 
-	switch (qcomtee_object_typeof(object)) {
+	switch (object_type) {
 	case QCOMTEE_OBJECT_TYPE_NULL:
 		tee_param->a = TEE_OBJREF_NULL;
 		tee_param->b = 0;
 
 		break;
 	case QCOMTEE_OBJECT_TYPE_TEE:
-		tee_param->a = object->object_id;
-		tee_param->b = 0;
+		tee_param->a = object->tee_object_id;
+		tee_param->b = QCOMTEE_OBJREF_TEE;
 
 		break;
 	case QCOMTEE_OBJECT_TYPE_CB:
+	case QCOMTEE_OBJECT_TYPE_MEMORY:
 		/* Only accept object that belong to the same namespace. */
 		if (object->root != root)
 			return -1;
@@ -398,8 +367,16 @@ static int qcomtee_object_param_to_tee_param(struct tee_ioctl_param *tee_param,
 		if (qcomtee_object_ns_insert(object, OBJECT_NS(object)))
 			return -1;
 
-		tee_param->a = object->object_id;
-		tee_param->b = QCOMTEE_OBJREF_USER;
+		/* If no QTEE object ID assigned to this object, assign one. */
+		if (!object->tee_object_id)
+			object->tee_object_id = object->object_id;
+
+		tee_param->a = object->tee_object_id;
+
+		if (object_type == QCOMTEE_OBJECT_TYPE_CB)
+			tee_param->b = QCOMTEE_OBJREF_USER;
+		else /* QCOMTEE_OBJECT_TYPE_MEMORY. */
+			tee_param->b = QCOMTEE_OBJREF_MEM;
 
 		break;
 	default:
@@ -435,11 +412,14 @@ qcomtee_object_param_from_tee_param(struct qcomtee_param *param,
 
 	/* Is it a callback object!? */
 	if (tee_param->b == QCOMTEE_OBJREF_USER) {
-		object = qcomtee_object_ns_find(
-			tee_param->a,
-			/* Search in the requested namespace. */
-			ROOT_OBJECT_NS(root));
-	} else {
+		object = qcomtee_object_ns_find(tee_param->a,
+						QCOMTEE_OBJECT_TYPE_CB,
+						ROOT_OBJECT_NS(root));
+	} else if (tee_param->b == QCOMTEE_OBJREF_MEM) {
+		object = qcomtee_object_ns_find(tee_param->a,
+						QCOMTEE_OBJECT_TYPE_MEMORY,
+						ROOT_OBJECT_NS(root));
+	} else { /* QCOMTEE_OBJREF_TEE. */
 		object = qcomtee_object_tee_init(root, tee_param->a);
 	}
 
@@ -705,9 +685,10 @@ union tee_ioctl_arg {
 /* Direct object invocation. */
 int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 			  struct qcomtee_param *params, int num_params,
-			  qcomtee_result_t *result, tee_call_t tee_call)
+			  qcomtee_result_t *result)
 {
 	struct qcomtee_object *root = object->root;
+	struct root_object *root_object = ROOT_OBJECT(root);
 	struct tee_ioctl_buf_data buf_data;
 	struct tee_ioctl_param *tee_params;
 	union tee_ioctl_arg *arg;
@@ -731,14 +712,15 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 
 	/* INVOKE object: */
 	arg->invoke.op = op;
-	arg->invoke.object = object->object_id;
+	arg->invoke.object = object->tee_object_id;
 	arg->invoke.num_params = num_params;
 	tee_params = (struct tee_ioctl_param *)(&arg->invoke + 1);
 
 	if (qcomtee_object_marshal_in(tee_params, params, num_params, root))
 		return -1;
 
-	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_OBJECT_INVOKE, &buf_data))
+	if (root_object->tee_call(root_object->fd, TEE_IOC_OBJECT_INVOKE,
+				  &buf_data))
 		return -1;
 
 	*result = arg->invoke.ret;
@@ -834,8 +816,9 @@ static int qcomtee_object_dispatch_request(struct qcomtee_object *object,
 	return WITH_RESPONSE;
 }
 
-int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
+int qcomtee_object_process_one(struct qcomtee_object *root)
 {
+	struct root_object *root_object = ROOT_OBJECT(root);
 	struct tee_ioctl_buf_data buf_data;
 	struct tee_ioctl_param *tee_params;
 	struct qcomtee_object *object;
@@ -872,7 +855,8 @@ int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 	tee_params[0].c = 0;
 
 	/* Wait to receive a request ... */
-	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_SUPPL_RECV, &buf_data))
+	if (root_object->tee_call(root_object->fd, TEE_IOC_SUPPL_RECV,
+				  &buf_data))
 		return -1;
 
 	/* ''Process received request''.
@@ -885,7 +869,8 @@ int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 
 	/* Find the requested object and call dispatcher: */
 
-	object = qcomtee_object_ns_find(tee_params[0].a, ROOT_OBJECT_NS(root));
+	object = qcomtee_object_ns_find(tee_params[0].a, QCOMTEE_OBJECT_TYPE_CB,
+					ROOT_OBJECT_NS(root));
 	if (object == QCOMTEE_OBJECT_NULL) {
 		TEE_IOCTL_ARG_SEND_INIT(arg, QCOMTEE_ERROR_DEFUNCT, 0);
 		err = WITH_RESPONSE_NO_NOTIFY;
@@ -917,7 +902,8 @@ int qcomtee_object_process_one(struct qcomtee_object *root, tee_call_t tee_call)
 	tee_params[0].b = 0;
 	tee_params[0].c = 0;
 
-	if (tee_call(ROOT_OBJECT(root)->fd, TEE_IOC_SUPPL_SEND, &buf_data))
+	if (root_object->tee_call(root_object->fd, TEE_IOC_SUPPL_SEND,
+				  &buf_data))
 		err = err == WITH_RESPONSE_NO_NOTIFY ? WITH_RESPONSE_NO_NOTIFY :
 						       WITH_RESPONSE_ERR;
 
