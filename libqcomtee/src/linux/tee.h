@@ -424,13 +424,13 @@ struct tee_ioctl_shm_register_data {
 
 /**
  * struct tee_ioctl_invoke_func_arg - Invokes an object in a Trusted Application.
- * @object:	[in] Object id
+ * @id:		[in] Object id
  * @op:		[in] Object operation, specific to the object
  * @ret:	[out] return value
  * @num_params	[in] number of parameters following this struct
  */
 struct tee_ioctl_object_invoke_arg {
-	__u64 object;
+	__u64 id;
 	__u32 op;
 	__u32 ret;
 	__u32 num_params;
