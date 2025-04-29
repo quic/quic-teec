@@ -712,7 +712,7 @@ int qcomtee_object_invoke(struct qcomtee_object *object, qcomtee_op_t op,
 
 	/* INVOKE object: */
 	arg->invoke.op = op;
-	arg->invoke.object = object->tee_object_id;
+	arg->invoke.id = object->tee_object_id;
 	arg->invoke.num_params = num_params;
 	tee_params = (struct tee_ioctl_param *)(&arg->invoke + 1);
 
