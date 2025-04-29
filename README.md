@@ -18,6 +18,7 @@ On an x86-64 Ubuntu machine, assuming you have a cross-build toolchain along wit
 git clone https://github.com/quic/quic-teec.git
 cd quic-teec
 mkdir build
+cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=CMakeToolchain.txt -DBUILD_UNITTEST=ON
 ```
 Edit `CMakeToolchain.txt` for the toolchain of your choice.
