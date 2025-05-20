@@ -10,12 +10,10 @@
  * @brief Get a credentials object.
  * @param root The root object to which this object belongs.
  * @param object Credentials object.
- * @return On success returns @ref QCOMTEE_OK;
- *         Otherwise @ref QCOMTEE_ERROR_MEM.
+ * @return On success, returns 0; Otherwise, returns -1.
  */
-qcomtee_result_t
-qcomtee_object_credentials_init(struct qcomtee_object *root,
-				struct qcomtee_object **object);
+int qcomtee_object_credentials_init(struct qcomtee_object *root,
+				    struct qcomtee_object **object);
 
 /* Select qcomtee_memory_object_alloc vs. qcomtee_memory_object_register. */
 #define qcomtee_memory_object_tee_api_select(a, b, c, d, fun, ...) fun

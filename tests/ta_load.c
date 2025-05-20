@@ -41,7 +41,7 @@ static int test_ta_cmd_0(struct qcomtee_object *ta)
 	if (num.num1 + num.num2 == sum)
 		return 0;
 
-	PRINT("%u + %u is %u but TA returned %u\n", num.num1, num.num2,
+	MSG_ERROR("%u + %u is %u but TA returned %u\n", num.num1, num.num2,
 	      num.num1 + num.num2, sum);
 
 	return -1;
@@ -72,7 +72,7 @@ test_load_ta_buffer(struct qcomtee_object *service_object, const char *pathname)
 	free(buffer);
 
 	if (ret || (result != QCOMTEE_OK)) {
-		PRINT("qcomtee_object_invoke.\n");
+		MSG_ERROR("Unable to obtain ta_controller, result %d\n", result);
 		return QCOMTEE_OBJECT_NULL;
 	}
 
@@ -95,8 +95,10 @@ test_load_ta_region(struct qcomtee_object *service_object, const char *pathname)
 	if (!size)
 		return QCOMTEE_OBJECT_NULL;
 
-	if (qcomtee_memory_object_alloc(size, root, &mo))
+	if (qcomtee_memory_object_alloc(size, root, &mo)) {
+		MSG_ERROR("Unable to allocate memory object\n");
 		return QCOMTEE_OBJECT_NULL;
+	}
 
 	buffer = qcomtee_memory_object_addr(mo);
 	/* Read the TA file. */
@@ -115,7 +117,7 @@ test_load_ta_region(struct qcomtee_object *service_object, const char *pathname)
 	qcomtee_memory_object_release(mo);
 
 	if (ret || (result != QCOMTEE_OK)) {
-		PRINT("qcomtee_object_invoke.\n");
+		MSG_ERROR("Unable to obtain ta_controller, result %d\n", result);
 		return QCOMTEE_OBJECT_NULL;
 	}
 
@@ -140,12 +142,14 @@ static struct ta test_load_ta(struct qcomtee_object *service_object, int use_mo,
 	/* 2 is IAppController_OP_getAppObject . */
 	if (qcomtee_object_invoke(ta.ta_controller, 2, params, 1, &result) ||
 	    (result != QCOMTEE_OK)) {
-		PRINT("qcomtee_object_invoke.\n");
+		MSG_ERROR("Unable to obtain ta object, result %d\n", result);
+		/* ta.ta is QCOMTEE_OBJECT_NULL. */
 		return ta;
 	}
 
 	ta.ta = params[0].object;
 
+	MSG_INFO("Obtained ta object\n");
 	return ta;
 }
 
@@ -154,49 +158,40 @@ void test_load_sample_ta(const char *pathname, int use_mo, int cmd)
 	struct ta test_ta;
 	struct qcomtee_object *client_env_object, *service_object;
 
+	MSG("Starting test_load_sample_ta\n");
+
 	/* Get root + supplicant. */
 	root = test_get_root();
-	if (root == QCOMTEE_OBJECT_NULL) {
-		PRINT("test_get_root.\n");
+	if (root == QCOMTEE_OBJECT_NULL)
 		return;
-	}
 
 	client_env_object = test_get_client_env_object(root);
-	if (client_env_object == QCOMTEE_OBJECT_NULL) {
-		PRINT("test_get_client_env_object.\n");
+	if (client_env_object == QCOMTEE_OBJECT_NULL)
 		goto dec_root_object;
-	}
 
 	/* 3 is UID of App. Loader service. */
 	service_object = test_get_service_object(client_env_object, 3);
-	if (service_object == QCOMTEE_OBJECT_NULL) {
-		PRINT("test_get_service_object.\n");
+	if (service_object == QCOMTEE_OBJECT_NULL)
 		goto dec_client_env_object;
-	}
 
 	/* Load the TA. */
 	test_ta = test_load_ta(service_object, use_mo, pathname);
-	if (test_ta.ta == QCOMTEE_OBJECT_NULL) {
-		PRINT("test_load_ta.\n");
+	if (test_ta.ta == QCOMTEE_OBJECT_NULL)
 		goto dec_service_object;
-	}
 
 	/* TEST TA: */
 	switch (cmd) {
 	case 0:
-		if (test_ta_cmd_0(test_ta.ta)) {
-			PRINT("test_ta_cmd_0.\n");
+		if (test_ta_cmd_0(test_ta.ta))
 			goto dec_unload_ta;
-		}
 
 		break;
 	default:
-		PRINT("Unknown command (%d).\n", cmd);
-
+		MSG_ERROR("Unknown command (%d)\n", cmd);
 		goto dec_unload_ta;
 	}
 
-	PRINT("SUCCESS.\n");
+	MSG_INFO("SUCCESS.\n");
 
 dec_unload_ta:
 	qcomtee_object_refs_dec(test_ta.ta);

@@ -45,8 +45,11 @@ size_t test_get_file_size_by_filename(const char *pathname, const char *name);
 size_t test_read_file2(const char *pathname, const char *name, char **buffer,
 		       size_t size);
 
-#define PRINT(fmt, ...) \
-	printf("[%s][%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define MSG(...) printf(__VA_ARGS__)
+#define MSG_ERROR(fmt, ...) \
+	printf("    [%s][%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define MSG_INFO(fmt, ...) printf("    " fmt, ##__VA_ARGS__)
+
 #define UBUF_INIT(u) ((struct qcomtee_ubuf){ (u), sizeof(*(u)) })
 
 /* ''TESTS:'' */

@@ -139,26 +139,25 @@ static struct qcomtee_object_ops ops = {
 	.dispatch = qcomtee_object_credentials_dispatch,
 };
 
-qcomtee_result_t
-qcomtee_object_credentials_init(struct qcomtee_object *root,
-				struct qcomtee_object **object)
+int qcomtee_object_credentials_init(struct qcomtee_object *root,
+				    struct qcomtee_object **object)
 {
 	struct qcomtee_credentials *qcomtee_cred;
 
 	qcomtee_cred = calloc(1, sizeof(*qcomtee_cred));
 	if (!qcomtee_cred)
-		return QCOMTEE_ERROR_MEM;
+		return -1;
 
 	qcomtee_object_cb_init(&qcomtee_cred->object, &ops, root);
 	/* INIT the credentials buffer. */
 	if (credentials_init(&qcomtee_cred->ubuf)) {
 		free(qcomtee_cred);
 
-		return QCOMTEE_ERROR_MEM;
+		return -1;
 	}
 
 	/* Get the credentials object. */
 	*object = &qcomtee_cred->object;
 
-	return QCOMTEE_OK;
+	return 0;
 }
