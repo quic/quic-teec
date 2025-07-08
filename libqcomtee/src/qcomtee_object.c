@@ -320,6 +320,7 @@ void qcomtee_object_refs_dec(struct qcomtee_object *object)
 		}
 		default:
 			/* NOTHING TO DO HERE. */
+			break;
 		}
 	}
 }
