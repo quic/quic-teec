@@ -1,13 +1,13 @@
 find_path(QCBOR_INCLUDE_DIR
         NAMES qcbor/qcbor.h
         HINTS ${QCBOR_DIR_HINT}
-        PATH_SUFFIXES include
+        PATH_SUFFIXES inc
 )
 
 find_library(QCBOR_LIBRARY
         NAMES qcbor
         HINTS ${QCBOR_DIR_HINT}
-        PATH_SUFFIXES lib
+        PATH_SUFFIXES build
 )
 
 if(QCBOR_INCLUDE_DIR AND QCBOR_LIBRARY)
