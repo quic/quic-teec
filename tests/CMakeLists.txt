@@ -1,4 +1,4 @@
-project(unittest C)
+project(qcomteetest C)
 
 # ''Packages''.
 
