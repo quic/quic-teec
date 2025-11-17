@@ -571,7 +571,7 @@ static int qcomtee_object_cb_marshal_in(struct qcomtee_param *params,
 		switch (tee_params[i].attr) {
 		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_INPUT:
 		case TEE_IOCTL_PARAM_ATTR_TYPE_UBUF_OUTPUT:
-			params[i].ubuf.addr = (void *)tee_params[i].a;
+			params[i].ubuf.addr = (void *)(uintptr_t)(tee_params[i].a);
 			params[i].ubuf.size = (size_t)tee_params[i].b;
 			params[i].attr =
 				(tee_params[i].attr ==
