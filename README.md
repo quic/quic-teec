@@ -27,6 +27,12 @@ In order to build the _qcomtee_ library, you require QCBOR. It is not available 
 
 Use `-DQCBOR_DIR_HINT=/path/to/installed/dir` to specify the QCBOR dependency.
 
+However, if QCBOR is not present, _qcomtee_ library fallbacks to using libcbor [libcbor](https://github.com/PJK/libcbor).
+
+Libcbor can be installed on Ubuntu/Debian using:
+```
+sudo apt-get install libcbor-dev
+```
 
 ## Unittest
 List of available tests are [here](tests/README.md)

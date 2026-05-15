@@ -4,8 +4,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include <qcbor/qcbor.h>
 #include <qcomtee_object_types.h>
+#ifdef USE_QCBOR
+#include <qcbor/qcbor.h>
+#else
+#include <cbor.h>
+#include <string.h>
+#endif
 
 #define IIO_OP_GET_LENGTH 0
 #define IIO_OP_READ_AT_OFFSET 1
@@ -29,6 +34,7 @@ enum {
 };
 
 #define CREDENTIALS_BUF_SIZE_INC 4096
+#ifdef USE_QCBOR
 static int realloc_useful_buf(UsefulBuf *buf)
 {
 	void *ptr;
@@ -72,6 +78,59 @@ static int credentials_init(struct qcomtee_ubuf *ubuf)
 
 	return 0;
 }
+#else
+static int credentials_init(struct qcomtee_ubuf *ubuf)
+{
+	cbor_mutable_data buffer = NULL;
+	cbor_item_t *creds_map = NULL;
+	struct cbor_pair map_pair;
+	size_t buffer_size = CREDENTIALS_BUF_SIZE_INC;
+
+	buffer = (unsigned char *)calloc(buffer_size, sizeof(unsigned char));
+	if (buffer == NULL)
+		return -1;
+
+	creds_map = cbor_new_definite_map(2);
+	if (creds_map == NULL)
+		goto map_init_fail;
+
+	map_pair.key = cbor_build_uint8(attr_uid);
+	map_pair.value = cbor_build_uint32((uint32_t)getuid());
+	if (!cbor_map_add(creds_map, map_pair))
+		goto map_add_fail;
+
+	map_pair.key = cbor_build_uint8(attr_system_time);
+	map_pair.value = cbor_build_uint64((uint64_t)get_time_in_ms());
+	if (!cbor_map_add(creds_map, map_pair))
+		goto map_add_fail;
+
+	/*
+	 * On failure in serialization we jump to map_serialize_fail
+	 * because cbor_decref() recursively frees all items already
+	 * added to the map. However, if cbor_map_add() fails, we
+	 * must manually decref the current key/value as ownership
+	 * is not transferred.
+	 */
+	buffer_size = cbor_serialize_map(creds_map, buffer, buffer_size);
+	if (buffer_size == 0)
+		goto map_serialize_fail;
+
+	ubuf->addr = (void *)buffer;
+	ubuf->size = buffer_size;
+
+	cbor_decref(&creds_map);
+	return 0;
+
+map_add_fail:
+	cbor_decref(&map_pair.key);
+	cbor_decref(&map_pair.value);
+map_serialize_fail:
+	cbor_decref(&creds_map);
+map_init_fail:
+	free(buffer);
+	return -1;
+}
+#endif
 
 /* CREDENTIAL callback object. */
 struct qcomtee_credentials {
