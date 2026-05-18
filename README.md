@@ -31,7 +31,9 @@ However, if QCBOR is not present, _qcomtee_ library fallbacks to using libcbor [
 
 Libcbor can be installed on Ubuntu/Debian using:
 ```
-sudo apt-get install libcbor-dev
+sudo dpkg --add-architecture arm64
+sudo apt-get update
+sudo apt-get install libcbor-dev:arm64
 ```
 
 ## Unittest
