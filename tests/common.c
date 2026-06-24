@@ -241,7 +241,7 @@ size_t test_read_file(const char *filename, char **buffer, size_t size)
 	if (size > 0) {
 		/* User provided the buffer; make sure it is large enough. */
 		if (size < file_size) {
-			MSG_ERROR("Buffer is small (required %lu)\n", file_size);
+			MSG_ERROR("Buffer is small (required %u)\n", file_size);
 			file_size = 0; /* Unable to read. */
 
 			goto out;
@@ -259,7 +259,7 @@ size_t test_read_file(const char *filename, char **buffer, size_t size)
 		}
 	}
 
-	MSG_INFO("Reading %s, %lu Bytes.\n", filename, file_size);
+	MSG_INFO("Reading %s, %u Bytes.\n", filename, file_size);
 
 	if (fread(file_buf, 1, file_size, file) != file_size) {
 		MSG_ERROR("%s\n", feof(file) ? "EOF" : strerror(errno));
