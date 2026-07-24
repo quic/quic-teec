@@ -60,6 +60,6 @@ Before raising a pull-request, please read and follow this checklist:
 
     The `-u` is shorthand for `--set-upstream`. This will set up the tracking reference so subsequent runs of `git push` or `git pull` can omit the remote and branch.
 
-1. [Submit a pull request](https://github.com/quic/<REPLACE-ME>/pulls) from your branch to `main`.
+1. [Submit a pull request](https://github.com/quic/quic-teec/pulls) from your branch to `main`.
 1. Pat yourself on the back and wait for your pull request to be reviewed.
 1. Participate in the code review to catch issues early and ensure quality.
