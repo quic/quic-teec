@@ -199,7 +199,7 @@ struct qcomtee_object *qcomtee_object_root_init(const char *dev,
 
 	/* INIT the root object. */
 	QCOMTEE_OBJECT_INIT(&root_object->object, QCOMTEE_OBJECT_TYPE_ROOT);
-	root_object->object.tee_object_id = TEE_OBJREF_NULL;
+	root_object->object.tee_object_id = (uint32_t)TEE_OBJREF_NULL;
 	root_object->object.ops = &qcomtee_object_root_ops;
 	root_object->object.root = &root_object->object;
 	root_object->tee_call = tee_call;

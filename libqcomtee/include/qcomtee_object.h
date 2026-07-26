@@ -207,8 +207,8 @@ struct qcomtee_object_ops {
  */
 struct qcomtee_object {
 	atomic_int refs; /**< Number of references to this object. */
-	uint64_t object_id; /**< ID assigned to this object. */
-	uint64_t tee_object_id; /**< ID assigned to this object for QTEE. */
+	uint32_t object_id; /**< ID assigned to this object. */
+	uint32_t tee_object_id; /**< ID assigned to this object for QTEE. */
 	qcomtee_object_type_t object_type; /**< Object Type. */
 
 	/**
