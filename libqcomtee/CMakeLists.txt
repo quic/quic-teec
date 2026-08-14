@@ -11,10 +11,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(QCBOR_DIR_HINT "" CACHE PATH "Hint path for QCBOR directory")
 
 find_package(QCBOR REQUIRED)
-if(QCBOR_FOUND)
-	add_compile_definitions(${PROJECT_NAME}
-		PRIVATE -DUSE_QCBOR)
-else()
+if(NOT QCBOR_FOUND)
 	message(WARNING "QCBOR not found, falling back to libcbor")
 endif()
 
@@ -50,6 +47,7 @@ target_include_directories(qcomtee
 )
 
 if(QCBOR_FOUND)
+	target_compile_definitions(qcomtee PRIVATE USE_QCBOR)
 	target_link_libraries(qcomtee PRIVATE ${QCBOR_LIBRARIES})
 else()
 	target_link_libraries(qcomtee PRIVATE cbor)
