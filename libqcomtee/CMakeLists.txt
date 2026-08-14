@@ -10,7 +10,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 set(QCBOR_DIR_HINT "" CACHE PATH "Hint path for QCBOR directory")
 
-find_package(QCBOR REQUIRED)
+find_package(QCBOR)
 if(NOT QCBOR_FOUND)
 	message(WARNING "QCBOR not found, falling back to libcbor")
 endif()
